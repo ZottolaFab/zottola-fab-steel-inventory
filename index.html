@@ -947,7 +947,8 @@ function renderInventory(){
     <div class="stat"><div class="stat-val">${inventory.length}</div><div class="stat-label">Entries</div></div>
     <div class="stat"><div class="stat-val">${tW>0?(tW/2000).toFixed(1)+' T':'—'}</div><div class="stat-label">Total wt (tons)</div></div>
     <div class="stat"><div class="stat-val">${tP-rP}</div><div class="stat-label">Pieces used</div></div>`;
-  list.innerHTML=inventory.map(item=>{
+  const sorted=[...inventory].sort((a,b)=>a.size.localeCompare(b.size));
+  list.innerHTML=sorted.map(item=>{
     const pct=item.qty>0?item.qtyRemaining/item.qty:0;
     const bc=pct===0?'badge-empty':pct<=0.2?'badge-low':'badge-ok';
     const bl=pct===0?'Empty':pct<=0.2?'Low':'OK';
