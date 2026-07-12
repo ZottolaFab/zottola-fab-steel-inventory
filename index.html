@@ -488,6 +488,23 @@ h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,
   </div>
 </div>
 
+<!-- OVER QTY WARNING MODAL -->
+<div class="modal-bg" id="modal-overqty" onclick="closeModal('modal-overqty')">
+  <div class="modal" onclick="event.stopPropagation()" style="text-align:center">
+    <div style="font-size:40px;margin-bottom:10px">⚠️</div>
+    <div style="font-size:17px;font-weight:700;color:var(--danger);margin-bottom:8px">Not enough stock</div>
+    <div style="font-size:14px;color:var(--text2);margin-bottom:6px" id="overqty-shape"></div>
+    <div style="font-size:13px;color:var(--text3);margin-bottom:6px">You requested <strong id="overqty-requested" style="color:var(--danger)"></strong> pcs</div>
+    <div style="font-size:13px;color:var(--text3);margin-bottom:20px">Only <strong id="overqty-available" style="color:var(--success)"></strong> pcs remaining</div>
+    <div style="background:var(--danger-bg);border:1px solid var(--danger);border-radius:var(--radius);padding:10px 14px;font-size:13px;color:var(--danger);margin-bottom:20px;line-height:1.5">
+      Cannot deduct more pieces than are available in inventory.
+    </div>
+    <button class="btn btn-primary btn-full" onclick="closeModal('modal-overqty')" style="background:var(--danger);border-color:var(--danger)">
+      <i class="ti ti-arrow-back"></i> Go back and adjust qty
+    </button>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script>
@@ -794,6 +811,14 @@ async function deleteItem(id){
   toast('Entry removed','success');
 }
 
+// ── OVER QTY WARNING ─────────────────────────────────────────────────
+function openOverQtyModal(shape,available,requested){
+  document.getElementById('overqty-shape').textContent=shape;
+  document.getElementById('overqty-requested').textContent=requested;
+  document.getElementById('overqty-available').textContent=available;
+  openModal('modal-overqty');
+}
+
 // ── USE MODAL ────────────────────────────────────────────────────────
 function openUse(id){
   const item=inventory.find(i=>i.id===id);if(!item)return;
@@ -823,7 +848,7 @@ async function confirmUse(){
     toast(`Qty updated to ${liveItem.qtyRemaining} — confirm again`,'danger');
     return;
   }
-  if(use>item.qtyRemaining){toast('Exceeds remaining qty','danger');return;}
+  if(use>item.qtyRemaining){openOverQtyModal(item.size,item.qtyRemaining,use);return;}
   item.qtyRemaining-=use;
   const entry={id:Date.now().toString(),itemId:item.id,shape:item.size,size:item.size,location:item.location,job:job||'',qtyUsed:use,qtyRemaining:item.qtyRemaining,lenFt:item.lenFt,lenIn:item.lenIn,remarks:rem,time:new Date().toISOString()};
   setSyncUI('syncing','saving…');
