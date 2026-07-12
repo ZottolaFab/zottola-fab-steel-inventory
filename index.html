@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>Zottola Fab · Steel Inventory</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.44.0/tabler-icons.min.css">
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -834,46 +835,107 @@ async function confirmUse(){
 }
 
 // ── BACKUP ───────────────────────────────────────────────────────────
-function buildCSV(){
-  const rows=[['Location','Shape','Size','Wt/ft','Qty','Qty Rem','Length','Total Wt (lbs)','Remarks','Date Added']];
-  inventory.forEach(i=>rows.push([i.location,i.shape,i.size,i.wPerFt||'',i.qty,i.qtyRemaining,fmtLen(i.lenFt,i.lenIn),i.totalWeight||'',i.remarks||'',new Date(i.added).toLocaleDateString()]));
-  return rows.map(r=>r.map(v=>'"'+String(v).replace(/"/g,'""')+'"').join(',')).join('\n');
+// ── EXCEL EXPORT ─────────────────────────────────────────────────────
+function buildWorkbook(){
+  const wb=XLSX.utils.book_new();
+
+  // ── Tab 1: Inventory ──
+  const invHeader=['Location','Shape','Size','Wt/ft (lbs)','Qty Original','Pieces Used','Qty Remaining','Length','Total Wt (lbs)','Remarks','Date Added'];
+  const invRows=inventory.map(i=>[
+    i.location,i.shape,i.size,
+    i.wPerFt?parseFloat(i.wPerFt):'',
+    i.qty,
+    i.qty-i.qtyRemaining,
+    i.qtyRemaining,
+    fmtLen(i.lenFt,i.lenIn),
+    i.totalWeight?parseFloat(i.totalWeight):'',
+    i.remarks||'',
+    new Date(i.added).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})
+  ]);
+  const invSheet=XLSX.utils.aoa_to_sheet([invHeader,...invRows]);
+  // Column widths
+  invSheet['!cols']=[{wch:20},{wch:14},{wch:14},{wch:10},{wch:12},{wch:12},{wch:14},{wch:10},{wch:14},{wch:30},{wch:14}];
+  XLSX.utils.book_append_sheet(wb,invSheet,'Inventory');
+
+  // ── Tab 2: Usage Log ──
+  const logHeader=['Date','Time','Job','Shape','Location','Qty Used','Qty Remaining','Length','Remarks'];
+  const logRows=usageLog.map(e=>{
+    const d=new Date(e.time&&e.time.includes('·')?e.time.replace(' · ',' '):e.time);
+    const date=isNaN(d.getTime())?e.time:d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+    const time=isNaN(d.getTime())?'':d.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});
+    return[date,time,e.job||'',e.shape,e.location,e.qtyUsed,e.qtyRemaining,e.length||fmtLen(e.lenFt,e.lenIn)||'',e.remarks||''];
+  });
+  const logSheet=XLSX.utils.aoa_to_sheet([logHeader,...logRows]);
+  logSheet['!cols']=[{wch:14},{wch:10},{wch:20},{wch:14},{wch:20},{wch:10},{wch:14},{wch:10},{wch:30}];
+  XLSX.utils.book_append_sheet(wb,logSheet,'Usage Log');
+
+  return wb;
 }
+
+function downloadXLSX(wb,fname){
+  XLSX.writeFile(wb,fname);
+}
+
 function doDownload(csv,fname){const a=document.createElement('a');a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv);a.download=fname;a.click();}
+
+function buildCSVforBackupPreview(){
+  const rows=[['Location','Shape','Size','Wt/ft','Qty Original','Pieces Used','Qty Remaining','Length','Total Wt (lbs)','Remarks','Date Added']];
+  inventory.forEach(i=>{const used=i.qty-i.qtyRemaining;rows.push([i.location,i.shape,i.size,i.wPerFt||'',i.qty,used,i.qtyRemaining,fmtLen(i.lenFt,i.lenIn),i.totalWeight||'',i.remarks||'',new Date(i.added).toLocaleDateString()]);});
+  return rows.map(r=>r.join('\t')).join('\n');
+}
+
 function backupNow(){
   if(!inventory.length){toast('Nothing to back up','danger');return;}
   const now=new Date().toISOString();
-  const fname=`zf-inventory-${now.slice(0,10)}-${now.slice(11,16).replace(':','')}.csv`;
-  const csv=buildCSV();
-  doDownload(csv,fname);
-  const entry={id:Date.now(),time:now,filename:fname,count:inventory.length,totalWeight:inventory.reduce((a,i)=>a+(i.totalWeight||0),0),csv};
+  const fname=`ZF-Inventory-${now.slice(0,10)}-${now.slice(11,16).replace(':','')}.xlsx`;
+  const wb=buildWorkbook();
+  downloadXLSX(wb,fname);
+  const entry={id:Date.now(),time:now,filename:fname,count:inventory.length,totalWeight:inventory.reduce((a,i)=>a+(i.totalWeight||0),0)};
   backupLog.unshift(entry);if(backupLog.length>50)backupLog=backupLog.slice(0,50);
   saveCache();renderBackupLog();
-  toast('Backup saved to Downloads','success');
+  toast('Excel backup saved to Downloads','success');
 }
-function redownloadBackup(id){const b=backupLog.find(x=>x.id===id);if(!b)return;doDownload(b.csv,b.filename);toast('Re-downloaded','success');}
+
+function redownloadBackup(id){
+  const b=backupLog.find(x=>x.id===id);if(!b)return;
+  // Rebuild the workbook from current data and re-download
+  const wb=buildWorkbook();
+  downloadXLSX(wb,b.filename);
+  toast('Re-downloaded','success');
+}
+
 function clearAllWithBackup(){
   clearBackupDL=false;
   document.getElementById('confirm-clear-btn').disabled=true;
   document.getElementById('confirm-clear-btn').style.opacity='0.4';
   document.getElementById('backup-dl-note').textContent='Download backup to unlock';
-  document.getElementById('backup-pre').textContent=buildCSV().slice(0,600)+'…';
+  document.getElementById('backup-pre').textContent=buildCSVforBackupPreview().slice(0,600)+'…';
   openModal('modal-backup');
 }
+
 function downloadBackupFromModal(){
-  const csv=buildCSV();const now=new Date().toISOString();
-  const fname=`zf-inventory-PRECLEAR-${now.slice(0,10)}.csv`;
-  doDownload(csv,fname);
-  const entry={id:Date.now(),time:now,filename:fname,count:inventory.length,totalWeight:inventory.reduce((a,i)=>a+(i.totalWeight||0),0),csv};
+  const now=new Date().toISOString();
+  const fname=`ZF-Inventory-PRECLEAR-${now.slice(0,10)}.xlsx`;
+  const wb=buildWorkbook();
+  downloadXLSX(wb,fname);
+  const entry={id:Date.now(),time:now,filename:fname,count:inventory.length,totalWeight:inventory.reduce((a,i)=>a+(i.totalWeight||0),0)};
   backupLog.unshift(entry);if(backupLog.length>50)backupLog=backupLog.slice(0,50);saveCache();
   clearBackupDL=true;
   document.getElementById('confirm-clear-btn').disabled=false;
   document.getElementById('confirm-clear-btn').style.opacity='1';
-  document.getElementById('backup-dl-note').textContent='✓ Saved to Downloads — clear button active';
-  toast('Backup saved to Downloads','success');
+  document.getElementById('backup-dl-note').textContent='✓ Excel backup saved to Downloads — clear button active';
+  toast('Excel backup saved to Downloads','success');
 }
+
 function confirmClearAll(){if(!clearBackupDL)return;inventory=[];usageLog=[];saveCache();renderInventory();renderLog();renderBackupLog();closeModal('modal-backup');toast('Local cache cleared','success');}
-function exportCSV(){if(!inventory.length){toast('Nothing to export','danger');return;}doDownload(buildCSV(),`zf-steel-${new Date().toISOString().slice(0,10)}.csv`);toast('Exported to Downloads','success');}
+
+function exportCSV(){
+  if(!inventory.length){toast('Nothing to export','danger');return;}
+  const fname=`ZF-Steel-Inventory-${new Date().toISOString().slice(0,10)}.xlsx`;
+  const wb=buildWorkbook();
+  downloadXLSX(wb,fname);
+  toast('Excel file saved to Downloads','success');
+}
 
 // ── RENDER ───────────────────────────────────────────────────────────
 function renderInventory(){
