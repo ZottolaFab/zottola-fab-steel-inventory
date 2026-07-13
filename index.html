@@ -488,6 +488,18 @@ h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,
   </div>
 </div>
 
+<!-- VALIDATION WARNING MODAL -->
+<div class="modal-bg" id="modal-validation" onclick="closeModal('modal-validation')">
+  <div class="modal" onclick="event.stopPropagation()" style="text-align:center">
+    <div style="font-size:40px;margin-bottom:10px">⚠️</div>
+    <div style="font-size:17px;font-weight:700;color:var(--warning);margin-bottom:8px" id="validation-title"></div>
+    <div style="font-size:14px;color:var(--text2);margin-bottom:20px" id="validation-msg"></div>
+    <button class="btn btn-primary btn-full" onclick="closeModal('modal-validation')" style="background:var(--warning);border-color:var(--warning);color:#000">
+      <i class="ti ti-arrow-back"></i> Go back and fix
+    </button>
+  </div>
+</div>
+
 <!-- OVER QTY WARNING MODAL -->
 <div class="modal-bg" id="modal-overqty" onclick="closeModal('modal-overqty')">
   <div class="modal" onclick="event.stopPropagation()" style="text-align:center">
@@ -762,9 +774,9 @@ async function saveItem(){
   const inches=parseFloat(document.getElementById('f-len-in').value)||0;
   const remarks=document.getElementById('f-remarks').value.trim();
   const editId=document.getElementById('f-edit-id').value;
-  if(!loc){toast('Enter a site location','danger');return;}
-  if(!size){toast('Enter a shape or size','danger');return;}
-  if(qty<1){toast('Enter number of pieces','danger');return;}
+  if(!loc){openValidationModal('Site location required','Please select or type a site location before saving.');return;}
+  if(!size){openValidationModal('Shape / size required','Please select or enter a shape and size before saving.');return;}
+  if(qty<1){openValidationModal('Number of pieces required','Please enter the number of pieces before saving.');return;}
   const wft=allW()[size]||null;
   setSyncUI('syncing','saving…');
   if(editId){
@@ -809,6 +821,13 @@ async function deleteItem(id){
   await writeInventoryToSheet();
   await syncAll(false);
   toast('Entry removed','success');
+}
+
+// ── VALIDATION WARNING ───────────────────────────────────────────────
+function openValidationModal(title,msg){
+  document.getElementById('validation-title').textContent=title;
+  document.getElementById('validation-msg').textContent=msg;
+  openModal('modal-validation');
 }
 
 // ── OVER QTY WARNING ─────────────────────────────────────────────────
