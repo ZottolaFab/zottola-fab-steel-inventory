@@ -286,11 +286,13 @@ h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,
     <div class="card-hd"><span class="card-label" id="add-card-label">New material entry</span></div>
     <div class="card-body">
       <input type="hidden" id="f-edit-id">
+
       <div class="field">
         <label>Site location</label>
         <select id="f-location-sel" onchange="onLocSel()"><option value="">— saved locations —</option></select>
         <input type="text" id="f-location" placeholder="or type custom location" style="margin-top:6px">
       </div>
+
       <div class="field">
         <label>Shape — search or select</label>
         <div class="shape-search-wrap">
@@ -302,11 +304,14 @@ h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,
           <option value="">— or browse by group —</option>
         </select>
       </div>
+
       <div class="field">
         <label>Size / designation</label>
         <input type="text" id="f-size" placeholder="e.g. W12x50" oninput="calcWeight()">
       </div>
+
       <div id="weight-block" style="display:none"><div class="weight-pill" id="weight-display">—</div></div>
+
       <div class="pieces-len-row">
         <div class="field" style="margin-bottom:0">
           <label>Number of pieces</label>
@@ -323,11 +328,81 @@ h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,
           <span class="hint">Tap for numpad</span>
         </div>
       </div>
+
       <div class="field">
         <label>Total weight (lbs)</label>
         <input type="number" id="f-weight-total" placeholder="auto-calculates or enter manually" step="0.1">
       </div>
+
       <div class="field">
+        <label>Document type</label>
+        <div style="display:flex;gap:8px;margin-top:2px">
+          <button id="f-doctype-invoice" onclick="setAddDocType('Invoice')"
+            style="flex:1;padding:8px;border-radius:var(--radius);border:1px solid var(--success);background:var(--success-bg);color:var(--success);font-size:12px;font-weight:500;cursor:pointer">
+            ✓ Invoice<br><span style="font-size:10px;font-weight:400">Received</span>
+          </button>
+          <button id="f-doctype-po" onclick="setAddDocType('PO')"
+            style="flex:1;padding:8px;border-radius:var(--radius);border:1px solid var(--border2);background:var(--surface2);color:var(--text2);font-size:12px;font-weight:500;cursor:pointer">
+            📋 Purchase Order<br><span style="font-size:10px;font-weight:400">On order</span>
+          </button>
+        </div>
+        <input type="hidden" id="f-doctype" value="Invoice">
+      </div>
+
+      <div class="field">
+        <label>Project / Stock</label>
+        <select id="f-project-sel" onchange="onAddProjSel(this.value)"
+          style="width:100%;padding:8px 10px;font-size:14px;border:1px solid var(--accent-dim);border-radius:var(--radius);background:var(--accent-bg);color:var(--text);font-family:var(--font)">
+          <option value="">— select project or stock —</option>
+          <option value="STOCK">📦 STOCK</option>
+          <option value="__new__">+ Add new project…</option>
+        </select>
+        <div id="f-project-new-wrap" style="display:none;margin-top:6px">
+          <input type="text" id="f-project-new" placeholder="Type new project name"
+            style="width:100%;padding:8px 10px;font-size:14px;border:1px solid var(--accent-dim);border-radius:var(--radius);background:var(--accent-bg);color:var(--text);font-family:var(--font)">
+        </div>
+        <input type="hidden" id="f-project" value="">
+      </div>
+
+      <div class="field-row">
+        <div class="field" style="margin-bottom:0">
+          <label>Cost per lb ($)</label>
+          <input type="number" id="f-cost-lb" placeholder="e.g. 0.8290" step="0.0001">
+        </div>
+        <div class="field" style="margin-bottom:0">
+          <label>Total cost ($)</label>
+          <input type="number" id="f-total-cost" placeholder="e.g. 846.41" step="0.01">
+        </div>
+      </div>
+
+      <div class="field" style="margin-top:10px">
+        <label>Supplier</label>
+        <input type="text" id="f-supplier" placeholder="e.g. O'Neal Steel, Alro, Metals USA">
+      </div>
+
+      <div class="field-row">
+        <div class="field" style="margin-bottom:0">
+          <label>Invoice / PO #</label>
+          <input type="text" id="f-invoice-num" placeholder="e.g. 15400622">
+        </div>
+        <div class="field" style="margin-bottom:0">
+          <label>PO #</label>
+          <input type="text" id="f-po-num" placeholder="e.g. 3747">
+        </div>
+      </div>
+
+      <div class="field-row" style="margin-top:10px">
+        <div class="field" style="margin-bottom:0">
+          <label>Grade</label>
+          <input type="text" id="f-grade" placeholder="A36, A992, A500…">
+        </div>
+        <div class="field" style="margin-bottom:0">
+          <label>Heat #</label>
+          <input type="text" id="f-heat" placeholder="if on MTR">
+        </div>
+      </div>
+
+      <div class="field" style="margin-top:10px">
         <label>Remarks</label>
         <div class="remarks-row">
           <textarea id="f-remarks" placeholder="Heat number, condition, mark…"></textarea>
@@ -335,6 +410,7 @@ h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,
         </div>
         <span class="hint">Type directly or tap <i class="ti ti-keyboard" style="font-size:11px"></i> for tablet keyboard</span>
       </div>
+
       <button class="btn btn-primary btn-full" onclick="saveItem()"><i class="ti ti-check"></i> <span id="save-btn-label">Add to inventory</span></button>
       <button class="btn btn-full" id="cancel-edit-btn" onclick="cancelEdit()" style="display:none;margin-top:6px"><i class="ti ti-x"></i> Cancel edit</button>
     </div>
@@ -753,18 +829,32 @@ async function writeTypesToSheet(){
 
 // ── PROJECTS (TT log) ────────────────────────────────────────────────
 async function loadProjects(manual=false){
-  const url=`https://docs.google.com/spreadsheets/d/${TT_SHEET_ID}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent(PROJ_TAB)}&_=${Date.now()}`;
-  try{
-    const r=await fetch(url);const txt=await r.text();
-    const json=JSON.parse(txt.replace(/^[^(]+\(|\);?$/g,''));
-    const names=[...new Set((json.table.rows||[]).slice(1).map(row=>row.c&&row.c[0]&&row.c[0].v?String(row.c[0].v).trim():'').filter(Boolean))];
-    if(names.length){
-      projects=names;saveCache();
-      if(manual)toast(`${names.length} projects loaded`,'success');
-      // Rebuild import dropdowns if review screen is open
-      if(importCurrentInv!==null) renderImportLineItems();
-    }
-  }catch(e){if(manual)toast('Could not load projects','danger');}
+  // Try multiple possible tab names
+  const tabNames=['Projects','projects','PROJECT','Sheet1','Jobs','TT Log'];
+  for(const tab of tabNames){
+    try{
+      const url=`https://docs.google.com/spreadsheets/d/${TT_SHEET_ID}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent(tab)}&_=${Date.now()}`;
+      const r=await fetch(url);
+      const txt=await r.text();
+      if(!txt.includes('table'))continue;
+      const json=JSON.parse(txt.replace(/^[^(]+\(|\);?$/g,''));
+      if(!json.table||!json.table.rows||json.table.rows.length<1)continue;
+      // Try col A first, then col B
+      let names=[];
+      for(let col=0;col<3;col++){
+        names=[...new Set(json.table.rows.slice(1).map(row=>row.c&&row.c[col]&&row.c[col].v?String(row.c[col].v).trim():'').filter(Boolean))];
+        if(names.length>0)break;
+      }
+      if(names.length>0){
+        projects=names;saveCache();
+        if(manual)toast(`${names.length} projects loaded from "${tab}" tab`,'success');
+        buildAddProjDD();
+        if(importCurrentInv!==null)renderImportLineItems();
+        return;
+      }
+    }catch(e){continue;}
+  }
+  if(manual)toast('Could not load projects — check sheet sharing','danger');
 }
 function startProjSync(){loadProjects();if(projTimer)clearInterval(projTimer);projTimer=setInterval(loadProjects,5*60*1000);}
 
@@ -842,6 +932,17 @@ async function saveItem(){
   const inches=parseFloat(document.getElementById('f-len-in').value)||0;
   const remarks=document.getElementById('f-remarks').value.trim();
   const editId=document.getElementById('f-edit-id').value;
+  const docType=document.getElementById('f-doctype').value||'Invoice';
+  const projectSel=document.getElementById('f-project-sel').value;
+  const projectNew=document.getElementById('f-project-new').value.trim();
+  const projectOrStock=projectSel==='__new__'?projectNew:(projectSel||'');
+  const costPerLb=parseFloat(document.getElementById('f-cost-lb').value)||null;
+  const totalCost=parseFloat(document.getElementById('f-total-cost').value)||null;
+  const supplier=document.getElementById('f-supplier').value.trim();
+  const invoiceNum=document.getElementById('f-invoice-num').value.trim();
+  const poNum=document.getElementById('f-po-num').value.trim();
+  const grade=document.getElementById('f-grade').value.trim();
+  const heatNumber=document.getElementById('f-heat').value.trim();
   if(!loc){openValidationModal('Site location required','Please select or type a site location before saving.');return;}
   if(!size){openValidationModal('Shape / size required','Please select or enter a shape and size before saving.');return;}
   if(qty<1){openValidationModal('Number of pieces required','Please enter the number of pieces before saving.');return;}
@@ -849,10 +950,10 @@ async function saveItem(){
   setSyncUI('syncing','saving…');
   if(editId){
     const item=inventory.find(i=>i.id===editId);
-    if(item){Object.assign(item,{location:loc,shape:shape!=='custom'?shape:size,size,wPerFt:wft,qty,lenFt:ft||null,lenIn:inches||null,totalWeight:wTotal||null,remarks,edited:new Date().toISOString()});}
+    if(item){Object.assign(item,{location:loc,shape:shape!=='custom'?shape:size,size,wPerFt:wft,qty,lenFt:ft||null,lenIn:inches||null,totalWeight:wTotal||null,costPerLb,totalCost,projectOrStock,docType,supplier,invoiceNum,poNum,grade,heatNumber,remarks,edited:new Date().toISOString()});}
     cancelEdit();toast('Entry updated','success');
   }else{
-    const newItem={id:Date.now().toString(),location:loc,shape:shape!=='custom'?shape:size,size,wPerFt:wft,qty,qtyRemaining:qty,lenFt:ft||null,lenIn:inches||null,totalWeight:wTotal||null,remarks,added:new Date().toISOString()};
+    const newItem={id:Date.now().toString(),location:loc,shape:shape!=='custom'?shape:size,size,wPerFt:wft,qty,qtyRemaining:qty,lenFt:ft||null,lenIn:inches||null,totalWeight:wTotal||null,costPerLb,totalCost,projectOrStock,docType,supplier,invoiceNum,poNum,grade,heatNumber,remarks,added:new Date().toISOString()};
     inventory.unshift(newItem);
     clearAddForm();toast('Added to inventory','success');
   }
@@ -876,11 +977,41 @@ function editItem(id){
   document.getElementById('f-len-in').value=item.lenIn||'';
   document.getElementById('f-weight-total').value=item.totalWeight||'';
   document.getElementById('f-remarks').value=item.remarks||'';
+  document.getElementById('f-cost-lb').value=item.costPerLb||'';
+  document.getElementById('f-total-cost').value=item.totalCost||'';
+  document.getElementById('f-supplier').value=item.supplier||'';
+  document.getElementById('f-invoice-num').value=item.invoiceNum||'';
+  document.getElementById('f-po-num').value=item.poNum||'';
+  document.getElementById('f-grade').value=item.grade||'';
+  document.getElementById('f-heat').value=item.heatNumber||'';
+  setAddDocType(item.docType||'Invoice');
+  buildAddProjDD();
+  if(item.projectOrStock){
+    const sel=document.getElementById('f-project-sel');
+    // Check if project exists in list
+    const exists=[...sel.options].some(o=>o.value===item.projectOrStock);
+    if(exists){sel.value=item.projectOrStock;document.getElementById('f-project').value=item.projectOrStock;}
+    else if(item.projectOrStock==='STOCK'){sel.value='STOCK';document.getElementById('f-project').value='STOCK';}
+    else{sel.value='__new__';document.getElementById('f-project-new-wrap').style.display='block';document.getElementById('f-project-new').value=item.projectOrStock;}
+  }
   applyWt(item.size);
-  switchTab('add',document.querySelectorAll('.tab')[1]);
+  switchTab('add',document.querySelectorAll('.tab')[2]);
 }
 function cancelEdit(){document.getElementById('f-edit-id').value='';document.getElementById('add-card-label').textContent='New material entry';document.getElementById('save-btn-label').textContent='Add to inventory';document.getElementById('cancel-edit-btn').style.display='none';clearAddForm();}
-function clearAddForm(){['f-location','f-size','f-qty','f-weight-total','f-len-ft','f-len-in','f-remarks'].forEach(id=>document.getElementById(id).value='');document.getElementById('f-shape').value='';document.getElementById('f-location-sel').value='';document.getElementById('shape-search').value='';document.getElementById('weight-block').style.display='none';document.getElementById('shape-dd').classList.remove('open');}
+function clearAddForm(){
+  ['f-location','f-size','f-qty','f-weight-total','f-len-ft','f-len-in','f-remarks','f-cost-lb','f-total-cost','f-supplier','f-invoice-num','f-po-num','f-grade','f-heat','f-project-new'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+  document.getElementById('f-shape').value='';
+  document.getElementById('f-location-sel').value='';
+  document.getElementById('shape-search').value='';
+  document.getElementById('weight-block').style.display='none';
+  document.getElementById('shape-dd').classList.remove('open');
+  document.getElementById('f-doctype').value='Invoice';
+  document.getElementById('f-project-sel').value='';
+  document.getElementById('f-project').value='';
+  document.getElementById('f-project-new-wrap').style.display='none';
+  setAddDocType('Invoice');
+  buildAddProjDD();
+}
 
 async function deleteItem(id){
   if(!confirm('Remove this entry from inventory?'))return;
@@ -1171,6 +1302,7 @@ function switchTab(name,btn){
   btn.classList.add('active');
   currentTab=name;
   if(name==='inventory')renderInventory();
+  if(name==='add'){buildAddProjDD();}
   if(name==='import'){renderImportSelector();}
   else if(name==='log')renderLog();
   else if(name==='backups')renderBackupLog();
@@ -1333,6 +1465,30 @@ function renderImportLineItems(){
   updateImportSummary();
 }
 
+function setAddDocType(type){
+  document.getElementById('f-doctype').value=type;
+  const ib=document.getElementById('f-doctype-invoice');
+  const pb=document.getElementById('f-doctype-po');
+  ib.style.background=type==='Invoice'?'var(--success-bg)':'var(--surface2)';
+  ib.style.color=type==='Invoice'?'var(--success)':'var(--text2)';
+  ib.style.borderColor=type==='Invoice'?'var(--success)':'var(--border2)';
+  pb.style.background=type==='PO'?'rgba(59,130,246,0.12)':'var(--surface2)';
+  pb.style.color=type==='PO'?'#60a5fa':'var(--text2)';
+  pb.style.borderColor=type==='PO'?'#3b82f6':'var(--border2)';
+}
+function onAddProjSel(val){
+  const wrap=document.getElementById('f-project-new-wrap');
+  if(val==='__new__'){wrap.style.display='block';document.getElementById('f-project').value='';document.getElementById('f-project-new').focus();}
+  else{wrap.style.display='none';document.getElementById('f-project').value=val;}
+}
+function buildAddProjDD(){
+  const sel=document.getElementById('f-project-sel');
+  const cur=sel.value;
+  sel.innerHTML='<option value="">— select project or stock —</option><option value="STOCK">📦 STOCK</option>';
+  projects.forEach(p=>{const o=document.createElement('option');o.value=p;o.textContent=p;if(p===cur)o.selected=true;sel.appendChild(o);});
+  const add=document.createElement('option');add.value='__new__';add.textContent='+ Add new project…';sel.appendChild(add);
+}
+
 function onImportProjSel(i, val){
   const newDiv = document.getElementById('imp-proj-new-'+i);
   if(val==='__new__'){
@@ -1472,6 +1628,7 @@ function importBackToSelector(){
 // ── INIT ─────────────────────────────────────────────────────────────
 loadCache();
 buildShapeDD();
+buildAddProjDD();
 document.getElementById('topbar-date') && (document.getElementById('topbar-date').textContent=new Date().toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'}));
 if(cfg.apiKey){
   document.getElementById('cfg-api-key').value=cfg.apiKey;
