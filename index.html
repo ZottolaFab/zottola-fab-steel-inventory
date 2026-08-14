@@ -261,10 +261,11 @@ h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,
 <!-- TABS -->
 <div class="tabs">
   <button class="tab active" onclick="switchTab('inventory',this)">Inventory</button>
+  <button class="tab" onclick="switchTab('import',this)"><i class="ti ti-file-import" style="font-size:13px"></i> Import</button>
   <button class="tab" onclick="switchTab('add',this)">Add material</button>
   <button class="tab" onclick="switchTab('log',this)">Usage log</button>
-  <button class="tab" onclick="switchTab('backups',this)">Backups</button>
   <button class="tab" onclick="switchTab('lists',this)">Locations &amp; types</button>
+  <button class="tab" onclick="switchTab('backups',this)">Backups</button>
   <button class="tab" onclick="switchTab('settings',this)">Settings</button>
 </div>
 
@@ -364,6 +365,49 @@ h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,
   <div id="locations-list"></div>
   <div class="sec-hd" style="margin-top:4px"><span>Custom material types</span><button class="btn btn-primary btn-sm" onclick="openAddType()"><i class="ti ti-plus"></i> Add</button></div>
   <div id="types-list"></div>
+</div>
+
+<!-- IMPORT TAB -->
+<div class="content pad0" id="tab-import" style="display:none">
+  <div id="import-selector-view" style="display:block">
+    <div style="padding:14px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
+      <span style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:0.06em">Select invoice</span>
+      <div style="display:flex;align-items:center;gap:8px">
+        <span style="font-size:11px;color:var(--text3)" id="import-done-count"></span>
+        <button class="btn btn-sm" onclick="loadProjects(true)" style="font-size:11px;padding:4px 10px"><i class="ti ti-refresh"></i> Sync projects</button>
+      </div>
+    </div>
+    <div style="padding:12px;display:flex;flex-direction:column;gap:8px" id="import-inv-list"></div>
+  </div>
+  <div id="import-review-view" style="display:none;flex-direction:column;gap:12px;padding:14px">
+    <button class="btn btn-sm" onclick="importBackToSelector()" style="align-self:flex-start"><i class="ti ti-arrow-left"></i> Back</button>
+    <div class="card" id="import-inv-header"></div>
+    <div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:0.06em;display:flex;justify-content:space-between;align-items:center">
+      Line items <span style="background:var(--accent-bg);color:var(--accent);border-radius:20px;padding:2px 8px;font-size:11px" id="import-item-count"></span>
+    </div>
+    <div id="import-line-items"></div>
+    <div class="card">
+      <div class="card-hd"><span class="card-label">Summary</span></div>
+      <div class="card-body">
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;text-align:center">
+          <div><div style="font-size:18px;font-weight:600;color:var(--accent)" id="imp-sum-items">-</div><div style="font-size:11px;color:var(--text3);margin-top:2px">Items</div></div>
+          <div><div style="font-size:18px;font-weight:600;color:var(--accent)" id="imp-sum-wt">-</div><div style="font-size:11px;color:var(--text3);margin-top:2px">Total lbs</div></div>
+          <div><div style="font-size:18px;font-weight:600;color:var(--accent)" id="imp-sum-cost">-</div><div style="font-size:11px;color:var(--text3);margin-top:2px">Total cost</div></div>
+        </div>
+      </div>
+    </div>
+    <div style="background:var(--danger-bg);border:1px solid var(--danger);border-radius:var(--radius);padding:10px 12px;font-size:13px;color:var(--danger);display:none" id="import-error"></div>
+    <button class="btn btn-primary btn-full" onclick="commitImport()" id="import-commit-btn"><i class="ti ti-database-import"></i> Confirm &amp; add to inventory</button>
+    <p style="font-size:11px;color:var(--text3);text-align:center;padding-bottom:20px">Enter project name or STOCK for every line &middot; Toggle off items to exclude</p>
+  </div>
+  <div id="import-result-view" style="display:none;padding:14px">
+    <div style="background:var(--success-bg);border:1px solid var(--success);border-radius:12px;padding:20px;text-align:center;margin-bottom:12px">
+      <div style="font-size:36px;margin-bottom:8px">&#x2705;</div>
+      <div style="font-size:16px;font-weight:600;color:var(--success);margin-bottom:6px">Added to inventory</div>
+      <div style="font-size:13px;color:var(--text2);line-height:1.6" id="import-result-sub"></div>
+    </div>
+    <button class="btn btn-full" onclick="importBackToSelector()"><i class="ti ti-arrow-left"></i> Import another invoice</button>
+  </div>
 </div>
 
 <!-- SETTINGS -->
@@ -602,13 +646,13 @@ function sheetsUpdate(tab,range,values){
 }
 
 // Row formats
-const INV_HEADER=['ID','Location','Shape','Size','Wt/ft','Qty','Qty Remaining','Len Ft','Len In','Total Wt (lbs)','Remarks','Added','Edited'];
+const INV_HEADER=['ID','Location','Shape','Size','Wt/ft','Qty','Qty Remaining','Len Ft','Len In','Total Wt (lbs)','Cost/lb','Total Cost','Project/Stock','Doc Type','Status','Supplier','Invoice #','PO #','Invoice Date','Grade','Heat #','Remarks','Added','Edited'];
 const LOG_HEADER=['ID','Date','Time','Job','Shape','Size','Location','Qty Used','Qty Remaining','Length','Remarks'];
 const LOC_HEADER=['ID','Name','Description'];
 const TYPE_HEADER=['ID','Name','Wt/ft','Category'];
 
-function invToRow(i){return[i.id,i.location,i.shape,i.size,i.wPerFt||'',i.qty,i.qtyRemaining,i.lenFt||'',i.lenIn||'',i.totalWeight||'',i.remarks||'',i.added,i.edited||''];}
-function rowToInv(r){return{id:r[0],location:r[1],shape:r[2],size:r[3],wPerFt:r[4]?parseFloat(r[4]):null,qty:parseInt(r[5])||0,qtyRemaining:parseInt(r[6])||0,lenFt:r[7]?parseFloat(r[7]):null,lenIn:r[8]?parseFloat(r[8]):null,totalWeight:r[9]?parseFloat(r[9]):null,remarks:r[10]||'',added:r[11]||new Date().toISOString(),edited:r[12]||''};}
+function invToRow(i){return[i.id,i.location,i.shape,i.size,i.wPerFt||'',i.qty,i.qtyRemaining,i.lenFt||'',i.lenIn||'',i.totalWeight||'',i.costPerLb||'',i.totalCost||'',i.projectOrStock||'',i.docType||'',i.docType==='PO'?'On Order':'Received',i.supplier||'',i.invoiceNum||'',i.poNum||'',i.invoiceDate||'',i.grade||'',i.heatNumber||'',i.remarks||'',i.added,i.edited||''];}
+function rowToInv(r){return{id:r[0],location:r[1],shape:r[2],size:r[3],wPerFt:r[4]?parseFloat(r[4]):null,qty:parseInt(r[5])||0,qtyRemaining:parseInt(r[6])||0,lenFt:r[7]?parseFloat(r[7]):null,lenIn:r[8]?parseFloat(r[8]):null,totalWeight:r[9]?parseFloat(r[9]):null,costPerLb:r[10]||null,totalCost:r[11]?parseFloat(r[11]):null,projectOrStock:r[12]||'',docType:r[13]||'',status:r[14]||'',supplier:r[15]||'',invoiceNum:r[16]||'',poNum:r[17]||'',invoiceDate:r[18]||'',grade:r[19]||'',heatNumber:r[20]||'',remarks:r[21]||'',added:r[22]||new Date().toISOString(),edited:r[23]||''};}
 function logToRow(e){const d=new Date(e.time);return[e.id,d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}),d.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'}),e.job||'',e.shape,e.size||'',e.location,e.qtyUsed,e.qtyRemaining,fmtLen(e.lenFt,e.lenIn),e.remarks||''];}
 function locToRow(l){return[l.id,l.name,l.desc||''];}
 function typeToRow(t){return[t.id,t.name,t.wft||'',t.category||''];}
@@ -682,6 +726,10 @@ async function scriptWrite(action, data){
     toast('Write failed — check Apps Script','danger');
     return {success:false};
   }
+}
+
+async function appendRowsToSheet(tab, rows, header){
+  return await scriptWrite('appendRows', {tab, rows, header});
 }
 
 async function writeInventoryToSheet(){
@@ -1025,7 +1073,7 @@ function renderInventory(){
         ${item.totalWeight?`<span class="meta-chip">${parseFloat(item.totalWeight).toFixed(0)} lbs</span>`:''}
         ${ls?`<span class="meta-chip">${ls} ea.</span>`:''}
         <span class="meta-chip">${new Date(item.added).toLocaleDateString()}</span>
-        ${item.edited?`<span class="meta-chip edited">edited</span>`:''}
+        ${item.edited?`<span class="meta-chip edited">edited</span>`:''}${item.docType==='PO'?`<span class="meta-chip" style="color:#60a5fa">On Order</span>`:''}${item.docType==='Invoice'?`<span class="meta-chip" style="color:var(--success)">Received</span>`:''}
       </div>
       <div class="inv-footer">
         <div class="qty-row">
@@ -1109,12 +1157,13 @@ function renderCurrentTab(){
 
 // ── TAB SWITCHING ────────────────────────────────────────────────────
 function switchTab(name,btn){
-  ['inventory','add','log','backups','lists','settings'].forEach(t=>document.getElementById('tab-'+t).style.display='none');
+  ['inventory','add','log','backups','lists','settings','import'].forEach(t=>document.getElementById('tab-'+t).style.display='none');
   document.getElementById('tab-'+name).style.display='flex';
   document.querySelectorAll('.tab').forEach(b=>b.classList.remove('active'));
   btn.classList.add('active');
   currentTab=name;
   if(name==='inventory')renderInventory();
+  if(name==='import'){renderImportSelector();}
   else if(name==='log')renderLog();
   else if(name==='backups')renderBackupLog();
   else if(name==='lists')renderLists();
@@ -1127,6 +1176,288 @@ function switchTab(name,btn){
 }
 
 document.addEventListener('click',e=>{if(!e.target.closest('.shape-search-wrap'))document.getElementById('shape-dd').classList.remove('open');});
+
+// ── INVOICE IMPORT DATA & FUNCTIONS ─────────────────────────────────
+const IMPORT_INVOICES=[
+  {doc_type:'Invoice',supplier:"O'Neal Steel",invoice_number:'15400622',invoice_date:'7/8/2026',po_number:'3747',sales_rep:'Kelley Garlick',total:3644.94,
+    items:[
+      {size:'PL A36 1/4x60x10',shape:'Plate',qty:2,length_ft:10,length_in:0,weight_lbs:1021,cost_per_lb:0.8290,total_cost:846.41,grade:'A36',heat:'',remarks:"O'Neal Item# 799457"},
+      {size:'PL A36 3/8x60x10',shape:'Plate',qty:1,length_ft:10,length_in:0,weight_lbs:766,cost_per_lb:0.8750,total_cost:670.25,grade:'A36',heat:'',remarks:"O'Neal Item# 803090"},
+      {size:'PL A36 1/2x60x10',shape:'Plate',qty:1,length_ft:10,length_in:0,weight_lbs:1021,cost_per_lb:0.8290,total_cost:846.41,grade:'A36',heat:'',remarks:"O'Neal Item# 805159"},
+      {size:'PL A36 3/4x60x10',shape:'Plate',qty:1,length_ft:10,length_in:0,weight_lbs:1531.5,cost_per_lb:0.8370,total_cost:1281.87,grade:'A36',heat:'',remarks:"O'Neal Item# 807234"}
+    ]},
+  {doc_type:'Invoice',supplier:"O'Neal Steel",invoice_number:'15419401',invoice_date:'7/27/2026',po_number:'3763',sales_rep:'Oliver Funk',total:3902.28,
+    items:[
+      {size:'L2x2x3/16',shape:'Angle',qty:17,length_ft:20,length_in:0,weight_lbs:829.6,cost_per_lb:0.8210,total_cost:681.10,grade:'A36/A529G50',heat:'',remarks:"O'Neal Item# 749732"},
+      {size:'FLATBAR 3/8x4',shape:'Flat Bar',qty:10,length_ft:20,length_in:0,weight_lbs:1020,cost_per_lb:0.7740,total_cost:789.48,grade:'A36/A529G50',heat:'',remarks:"O'Neal Item# 776175"},
+      {size:'PL A36 1/4x60x10',shape:'Plate',qty:3,length_ft:10,length_in:0,weight_lbs:1531.5,cost_per_lb:0.8595,total_cost:1316.32,grade:'A36',heat:'',remarks:"O'Neal Item# 799457"},
+      {size:'FLATBAR 5/16x2-1/2',shape:'Flat Bar',qty:5,length_ft:20,length_in:0,weight_lbs:266,cost_per_lb:0.9595,total_cost:255.23,grade:'A36/A529G50',heat:'',remarks:"O'Neal Item# 774858"},
+      {size:'ROUND 1/2',shape:'Round Bar',qty:10,length_ft:20,length_in:0,weight_lbs:133.5,cost_per_lb:1.0460,total_cost:139.64,grade:'A36/A529G50',heat:'',remarks:"O'Neal Item# 834574"},
+      {size:'HSS 2x2x11GA',shape:'HSS',qty:5,length_ft:24,length_in:0,weight_lbs:368.4,cost_per_lb:1.2193,total_cost:448.80,grade:'A500 GR B',heat:'',remarks:"O'Neal Item# 15367577"},
+      {size:'ROUND 3/4',shape:'Round Bar',qty:10,length_ft:20,length_in:0,weight_lbs:300.4,cost_per_lb:0.9045,total_cost:271.71,grade:'A36/A529G50',heat:'',remarks:"O'Neal Item# 834718"}
+    ]},
+  {doc_type:'Invoice',supplier:'Alro Steel',invoice_number:'GHC3744PV',invoice_date:'8/3/2026',po_number:'3766',sales_rep:'David Yuran',total:2775.60,
+    items:[
+      {size:'PIPE 1-1/4 SCH10',shape:'Pipe',qty:61,length_ft:21,length_in:0,weight_lbs:2313,cost_per_lb:1.2000,total_cost:2775.60,grade:'A-500 GR B',heat:'637100',remarks:'RT12603565 · 1.66 OD .109 WALL'}
+    ]},
+  {doc_type:'Invoice',supplier:'Metals USA',invoice_number:'APA IV-328432',invoice_date:'8/11/2026',po_number:'3772',sales_rep:'Abby Seymour / Brett Cash',total:9578.88,
+    items:[
+      {size:'W16x26',shape:'W Shape',qty:1,length_ft:50,length_in:0,weight_lbs:1300,cost_per_lb:1.0895,total_cost:1416.35,grade:'A992',heat:'',remarks:'Carbon Wide Flange Beam A992'},
+      {size:'W16x26',shape:'W Shape',qty:1,length_ft:30,length_in:0,weight_lbs:780,cost_per_lb:1.0895,total_cost:849.81,grade:'A992',heat:'',remarks:'Carbon Wide Flange Beam A992'},
+      {size:'PL A36 1/4x60x120',shape:'Plate',qty:1,length_ft:10,length_in:0,weight_lbs:511,cost_per_lb:0.8695,total_cost:444.31,grade:'A36',heat:'',remarks:'Carbon Steel Plate A36'},
+      {size:'PL A36 3/8x60x120',shape:'Plate',qty:2,length_ft:10,length_in:0,weight_lbs:1532,cost_per_lb:0.8995,total_cost:1378.03,grade:'A36',heat:'',remarks:'Carbon Steel Plate A36'},
+      {size:'PL A36 1/2x60x120',shape:'Plate',qty:1,length_ft:10,length_in:0,weight_lbs:1021,cost_per_lb:0.8995,total_cost:918.39,grade:'A36',heat:'',remarks:'Carbon Steel Plate A36'},
+      {size:'PL A36 3/4x60x120',shape:'Plate',qty:2,length_ft:10,length_in:0,weight_lbs:3063,cost_per_lb:0.8665,total_cost:2654.09,grade:'A36',heat:'',remarks:'Carbon Steel Plate A36'},
+      {size:'PL A36 1x60x120',shape:'Plate',qty:1,length_ft:10,length_in:0,weight_lbs:2042,cost_per_lb:0.8790,total_cost:1794.92,grade:'A36',heat:'',remarks:'Carbon Steel Plate A36'}
+    ]}
+];
+let importCompletedInvoices=new Set();
+let importCurrentInv=null;
+let importLineItems=[];
+
+function renderImportSelector(){
+  const list=document.getElementById('import-inv-list');
+  list.innerHTML=IMPORT_INVOICES.map((inv,i)=>`
+    <div style="background:var(--surface);border:1px solid ${importCompletedInvoices.has(i)?'var(--success)':'var(--border)'};border-radius:12px;padding:14px 16px;cursor:pointer;display:flex;align-items:center;gap:12px;opacity:${importCompletedInvoices.has(i)?'0.6':'1'}"
+      onclick="loadImportInvoice(${i})">
+      <div style="width:28px;height:28px;border-radius:50%;background:${importCompletedInvoices.has(i)?'var(--success-bg)':'var(--surface2)'};color:${importCompletedInvoices.has(i)?'var(--success)':'var(--text3)'};font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0">
+        ${importCompletedInvoices.has(i)?'✓':(i+1)}
+      </div>
+      <div style="flex:1;min-width:0">
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:2px">
+          <span style="font-size:13px;font-weight:500">${inv.supplier} — ${inv.invoice_number}</span>
+          <span style="font-size:10px;font-weight:600;padding:2px 7px;border-radius:20px;background:${inv.doc_type==='PO'?'rgba(59,130,246,0.12)':'var(--success-bg)'};color:${inv.doc_type==='PO'?'#60a5fa':'var(--success)'}">${inv.doc_type||'Invoice'}</span>
+        </div>
+        <div style="font-size:11px;color:var(--text3)">${inv.invoice_date} · PO# ${inv.po_number} · ${inv.items.length} items · ${inv.doc_type==='PO'?'<span style=\'color:#60a5fa\'>On order</span>':'<span style=\'color:var(--success)\'>Received</span>'}</div>
+      </div>
+      <div style="font-size:13px;font-weight:600;color:var(--success);white-space:nowrap">$${inv.total.toLocaleString('en-US',{minimumFractionDigits:2})}</div>
+    </div>`).join('');
+  document.getElementById('import-done-count').textContent=importCompletedInvoices.size+' of '+IMPORT_INVOICES.length+' imported';
+}
+
+function loadImportInvoice(idx){
+  importCurrentInv=idx;
+  const inv=IMPORT_INVOICES[idx];
+  importLineItems=inv.items.map((item,i)=>({...item,_id:i,_included:true,_project:'',_location:''}));
+  // Header
+  document.getElementById('import-inv-header').innerHTML=`
+    <div class="card-hd"><span class="card-label">Invoice details</span></div>
+    <div class="card-body">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div><div style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:3px">Supplier</div><div style="font-size:13px;font-weight:500">${inv.supplier}</div></div>
+        <div><div style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:3px">Invoice #</div><div style="font-size:13px;font-weight:500">${inv.invoice_number}</div></div>
+        <div><div style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:3px">Date</div><div style="font-size:13px;font-weight:500">${inv.invoice_date}</div></div>
+        <div><div style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:3px">PO #</div><div style="font-size:13px;font-weight:500">${inv.po_number}</div></div>
+        <div><div style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:3px">Sales rep</div><div style="font-size:13px;font-weight:500">${inv.sales_rep}</div></div>
+        <div><div style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:3px">Total</div><div style="font-size:13px;font-weight:600;color:var(--success)">$${inv.total.toLocaleString('en-US',{minimumFractionDigits:2})}</div></div>
+        <div style="grid-column:1/-1">
+          <div style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px">Document type</div>
+          <div style="display:flex;gap:8px">
+            <button id="doctype-invoice-btn" onclick="setImportDocType('Invoice')"
+              style="flex:1;padding:8px;border-radius:var(--radius);border:1px solid;font-size:13px;font-weight:500;cursor:pointer;background:${inv.doc_type==='Invoice'?'var(--success-bg)':'var(--surface2)'};color:${inv.doc_type==='Invoice'?'var(--success)':'var(--text2)'};border-color:${inv.doc_type==='Invoice'?'var(--success)':'var(--border2)'}">
+              &#x2713; Invoice <span style="font-size:11px;display:block;font-weight:400;margin-top:1px">Material received</span>
+            </button>
+            <button id="doctype-po-btn" onclick="setImportDocType('PO')"
+              style="flex:1;padding:8px;border-radius:var(--radius);border:1px solid;font-size:13px;font-weight:500;cursor:pointer;background:${inv.doc_type==='PO'?'rgba(59,130,246,0.12)':'var(--surface2)'};color:${inv.doc_type==='PO'?'#60a5fa':'var(--text2)'};border-color:${inv.doc_type==='PO'?'#3b82f6':'var(--border2)'}">
+              &#x1F4CB; Purchase Order <span style="font-size:11px;display:block;font-weight:400;margin-top:1px">Material on order</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>`;
+  renderImportLineItems();
+  document.getElementById('import-selector-view').style.display='none';
+  document.getElementById('import-review-view').style.display='flex';
+  document.getElementById('import-result-view').style.display='none';
+}
+
+function renderImportLineItems(){
+  document.getElementById('import-item-count').textContent=importLineItems.length+' items';
+  const list=document.getElementById('import-line-items');
+  list.innerHTML='';
+  importLineItems.forEach((item,i)=>{
+    const div=document.createElement('div');
+    div.id='imp-li-'+i;
+    div.style.cssText='background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:8px;'+(item._included?'':'opacity:0.4;border-style:dashed');
+    div.innerHTML=`
+      <div style="padding:10px 12px;background:var(--surface2);display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--border)">
+        <div style="width:22px;height:22px;border-radius:50%;background:var(--accent-bg);color:var(--accent);font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0">${i+1}</div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:14px;font-weight:600">${item.size}</div>
+          <div style="font-size:11px;color:var(--text3);margin-top:1px">${item.shape} · ${item.qty} pc${item.qty>1?'s':''} · ${fmtLen(item.length_ft,item.length_in)} ea.</div>
+        </div>
+        <div style="font-size:13px;font-weight:600;color:var(--success);white-space:nowrap">$${item.total_cost.toLocaleString('en-US',{minimumFractionDigits:2})}</div>
+        <button onclick="toggleImportItem(${i})" id="imp-toggle-${i}" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:15px;padding:2px 6px">
+          <i class="ti ti-${item._included?'eye':'eye-off'}"></i>
+        </button>
+      </div>
+      <div style="padding:12px;display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div><div style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:3px">Weight</div><div style="font-size:13px;color:var(--text2)">${item.weight_lbs.toLocaleString('en-US')} lbs</div></div>
+        <div><div style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:3px">Cost / lb</div><div style="font-size:13px;color:var(--accent);font-weight:500">$${item.cost_per_lb.toFixed(4)}</div></div>
+        <div><div style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:3px">Grade</div><div style="font-size:13px;color:var(--text2)">${item.grade||'—'}</div></div>
+        <div><div style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:3px">Heat #</div><div style="font-size:13px;color:var(--text2)">${item.heat||'—'}</div></div>
+        <div style="grid-column:1/-1">
+          <div style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:5px">Site location (optional)</div>
+          <input type="text" placeholder="e.g. Bay 3, Rack A, Yard" style="width:100%;padding:8px 10px;font-size:13px;border:1px solid var(--border2);border-radius:var(--radius);background:var(--surface2);color:var(--text);font-family:var(--font)"
+            oninput="importLineItems[${i}]._location=this.value" value="${item._location||''}">
+        </div>
+        <div style="grid-column:1/-1">
+          <div style="font-size:10px;font-weight:600;color:var(--accent);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:5px">Project / Stock <span style="color:var(--accent)">*</span></div>
+          <select id="imp-proj-sel-${i}" onchange="onImportProjSel(${i},this.value)"
+            style="width:100%;padding:8px 10px;font-size:13px;border:1px solid var(--accent-dim);border-radius:var(--radius);background:var(--accent-bg);color:var(--text);font-family:var(--font);margin-bottom:6px">
+            <option value="">— select project or stock —</option>
+            <option value="STOCK">📦 STOCK</option>
+            ${projects.map(p=>`<option value="${p}" ${item._project===p?'selected':''}>${p}</option>`).join('')}
+            <option value="__new__">+ Add new project…</option>
+          </select>
+          <div id="imp-proj-new-${i}" style="display:none">
+            <input type="text" placeholder="Type new project name" id="imp-proj-newval-${i}"
+              style="width:100%;padding:8px 10px;font-size:13px;border:1px solid var(--accent-dim);border-radius:var(--radius);background:var(--accent-bg);color:var(--text);font-family:var(--font)"
+              oninput="importLineItems[${i}]._project=this.value">
+          </div>
+        </div>
+        ${item.remarks?`<div style="grid-column:1/-1;font-size:11px;color:var(--text3);background:var(--surface3);border-radius:6px;padding:6px 8px">${item.remarks}</div>`:''}
+      </div>`;
+    list.appendChild(div);
+  });
+  updateImportSummary();
+}
+
+function onImportProjSel(i, val){
+  const newDiv = document.getElementById('imp-proj-new-'+i);
+  if(val==='__new__'){
+    newDiv.style.display='block';
+    importLineItems[i]._project='';
+    document.getElementById('imp-proj-newval-'+i)?.focus();
+  } else {
+    newDiv.style.display='none';
+    importLineItems[i]._project=val;
+  }
+}
+
+function setImportDocType(type){
+  IMPORT_INVOICES[importCurrentInv].doc_type=type;
+  // Re-render header to reflect change
+  const inv=IMPORT_INVOICES[importCurrentInv];
+  const invBtn=document.getElementById('doctype-invoice-btn');
+  const poBtn=document.getElementById('doctype-po-btn');
+  if(invBtn){
+    invBtn.style.background=type==='Invoice'?'var(--success-bg)':'var(--surface2)';
+    invBtn.style.color=type==='Invoice'?'var(--success)':'var(--text2)';
+    invBtn.style.borderColor=type==='Invoice'?'var(--success)':'var(--border2)';
+  }
+  if(poBtn){
+    poBtn.style.background=type==='PO'?'rgba(59,130,246,0.12)':'var(--surface2)';
+    poBtn.style.color=type==='PO'?'#60a5fa':'var(--text2)';
+    poBtn.style.borderColor=type==='PO'?'#3b82f6':'var(--border2)';
+  }
+}
+
+function toggleImportItem(i){
+  importLineItems[i]._included=!importLineItems[i]._included;
+  const el=document.getElementById('imp-li-'+i);
+  el.style.opacity=importLineItems[i]._included?'1':'0.4';
+  el.style.borderStyle=importLineItems[i]._included?'solid':'dashed';
+  document.getElementById('imp-toggle-'+i).innerHTML=`<i class="ti ti-${importLineItems[i]._included?'eye':'eye-off'}"></i>`;
+  updateImportSummary();
+}
+
+function updateImportSummary(){
+  const inc=importLineItems.filter(i=>i._included);
+  const wt=inc.reduce((a,i)=>a+(i.weight_lbs||0),0);
+  const cost=inc.reduce((a,i)=>a+(i.total_cost||0),0);
+  document.getElementById('imp-sum-items').textContent=inc.length;
+  document.getElementById('imp-sum-wt').textContent=wt.toLocaleString('en-US',{maximumFractionDigits:0});
+  document.getElementById('imp-sum-cost').textContent='$'+cost.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+}
+
+async function commitImport(){
+  const included=importLineItems.filter(i=>i._included);
+  if(!included.length){toast('No items included','danger');return;}
+  const missing=included.find(i=>!i._project.trim());
+  if(missing){
+    const err=document.getElementById('import-error');
+    err.style.display='block';
+    err.textContent='Enter a project name or STOCK for every included item.';
+    document.getElementById('imp-proj-'+missing._id)?.focus();
+    return;
+  }
+  document.getElementById('import-error').style.display='none';
+  document.getElementById('import-commit-btn').textContent='Saving…';
+  document.getElementById('import-commit-btn').disabled=true;
+
+  const inv=IMPORT_INVOICES[importCurrentInv];
+  const newEntries=included.map(item=>({
+    id:Date.now().toString()+Math.random().toString(36).slice(2,5),
+    location:item._location||'',
+    shape:item.shape,
+    size:item.size,
+    wPerFt:null,
+    qty:item.qty,
+    qtyRemaining:item.qty,
+    lenFt:item.length_ft||null,
+    lenIn:item.length_in||null,
+    totalWeight:item.weight_lbs||null,
+    costPerLb:item.cost_per_lb||null,
+    totalCost:item.total_cost||null,
+    projectOrStock:item._project.trim().toUpperCase()==='STOCK'?'STOCK':item._project.trim(),
+    docType:inv.doc_type||'Invoice',
+    supplier:inv.supplier,
+    invoiceNum:inv.invoice_number,
+    poNum:inv.po_number,
+    invoiceDate:inv.invoice_date,
+    grade:item.grade||'',
+    heatNumber:item.heat||'',
+    remarks:[
+      item._project.trim().toUpperCase()!=='STOCK'?'Project: '+item._project.trim():'STOCK',
+      item.grade||'',
+      item.heat?'Heat#: '+item.heat:'',
+      inv.supplier,
+      'Inv: '+inv.invoice_number,
+      'PO: '+inv.po_number
+    ].filter(Boolean).join(' · '),
+    added:new Date().toISOString()
+  }));
+
+  // Add to local inventory and write to sheet
+  newEntries.forEach(e=>inventory.unshift(e));
+  const result=await writeInventoryToSheet();
+  if(!result||!result.success){
+    toast('Write failed — check connection','danger');
+    document.getElementById('import-commit-btn').textContent='Confirm & add to inventory';
+    document.getElementById('import-commit-btn').disabled=false;
+    return;
+  }
+  await syncAll(false);
+
+  importCompletedInvoices.add(importCurrentInv);
+  const projItems=newEntries.filter(e=>e.projectOrStock!=='STOCK');
+  const stockItems=newEntries.filter(e=>e.projectOrStock==='STOCK');
+  const totalCost=included.reduce((a,i)=>a+(i.total_cost||0),0);
+  const totalWt=included.reduce((a,i)=>a+(i.weight_lbs||0),0);
+  const projGroups={};
+  projItems.forEach(e=>{if(!projGroups[e.projectOrStock])projGroups[e.projectOrStock]=[];projGroups[e.projectOrStock].push(e.size);});
+  let sub=`<strong>${newEntries.length} items added to inventory</strong><br>`;
+  Object.entries(projGroups).forEach(([p,s])=>{sub+=`<br>📋 <strong>${p}:</strong> ${s.join(', ')}`;});
+  if(stockItems.length) sub+=`<br>📦 <strong>Stock:</strong> ${stockItems.map(e=>e.size).join(', ')}`;
+  sub+=`<br><br>${totalWt.toLocaleString('en-US',{maximumFractionDigits:0})} lbs · $${totalCost.toLocaleString('en-US',{minimumFractionDigits:2})} total cost`;
+
+  document.getElementById('import-result-sub').innerHTML=sub;
+  document.getElementById('import-review-view').style.display='none';
+  document.getElementById('import-result-view').style.display='block';
+  document.getElementById('import-commit-btn').textContent='Confirm & add to inventory';
+  document.getElementById('import-commit-btn').disabled=false;
+  toast('Added '+newEntries.length+' items to inventory','success');
+}
+
+function importBackToSelector(){
+  importCurrentInv=null;
+  importLineItems=[];
+  document.getElementById('import-selector-view').style.display='block';
+  document.getElementById('import-review-view').style.display='none';
+  document.getElementById('import-result-view').style.display='none';
+  renderImportSelector();
+}
 
 // ── INIT ─────────────────────────────────────────────────────────────
 loadCache();
