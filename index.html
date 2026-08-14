@@ -758,7 +758,12 @@ async function loadProjects(manual=false){
     const r=await fetch(url);const txt=await r.text();
     const json=JSON.parse(txt.replace(/^[^(]+\(|\);?$/g,''));
     const names=[...new Set((json.table.rows||[]).slice(1).map(row=>row.c&&row.c[0]&&row.c[0].v?String(row.c[0].v).trim():'').filter(Boolean))];
-    if(names.length){projects=names;saveCache();if(manual)toast(`${names.length} projects loaded`,'success');}
+    if(names.length){
+      projects=names;saveCache();
+      if(manual)toast(`${names.length} projects loaded`,'success');
+      // Rebuild import dropdowns if review screen is open
+      if(importCurrentInv!==null) renderImportLineItems();
+    }
   }catch(e){if(manual)toast('Could not load projects','danger');}
 }
 function startProjSync(){loadProjects();if(projTimer)clearInterval(projTimer);projTimer=setInterval(loadProjects,5*60*1000);}
@@ -991,7 +996,10 @@ function buildCSVforBackupPreview(){
   return rows.map(r=>r.join('\t')).join('\n');
 }
 
-function backupNow(){
+async function backupNow(){
+  if(!cfg.apiKey){toast('Connect to sheet first in Settings','danger');return;}
+  toast('Syncing before backup…','');
+  await syncAll(false);
   if(!inventory.length){toast('Nothing to back up','danger');return;}
   const now=new Date().toISOString();
   const fname=`ZF-Inventory-${now.slice(0,10)}-${now.slice(11,16).replace(':','')}.xlsx`;
@@ -1239,6 +1247,8 @@ function loadImportInvoice(idx){
   importCurrentInv=idx;
   const inv=IMPORT_INVOICES[idx];
   importLineItems=inv.items.map((item,i)=>({...item,_id:i,_included:true,_project:'',_location:''}));
+  // Ensure latest projects are loaded before rendering dropdowns
+  loadProjects(false);
   // Header
   document.getElementById('import-inv-header').innerHTML=`
     <div class="card-hd"><span class="card-label">Invoice details</span></div>
