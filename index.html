@@ -352,7 +352,7 @@ h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,
       <div class="field">
         <label>Project / Stock</label>
         <select id="f-project-sel" onchange="onAddProjSel(this.value)"
-          style="width:100%;padding:8px 10px;font-size:14px;border:1px solid var(--accent-dim);border-radius:var(--radius);background:var(--accent-bg);color:var(--text);font-family:var(--font)">
+          style="width:100%;padding:8px 10px;font-size:14px;border:1px solid var(--border2);border-radius:var(--radius);background:var(--surface2);color:var(--text);font-family:var(--font)">
           <option value="">— select project or stock —</option>
           <option value="STOCK">📦 STOCK</option>
           <option value="__new__">+ Add new project…</option>
@@ -829,32 +829,27 @@ async function writeTypesToSheet(){
 
 // ── PROJECTS (TT log) ────────────────────────────────────────────────
 async function loadProjects(manual=false){
-  // Try multiple possible tab names
-  const tabNames=['Projects','projects','PROJECT','Sheet1','Jobs','TT Log'];
-  for(const tab of tabNames){
-    try{
-      const url=`https://docs.google.com/spreadsheets/d/${TT_SHEET_ID}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent(tab)}&_=${Date.now()}`;
-      const r=await fetch(url);
-      const txt=await r.text();
-      if(!txt.includes('table'))continue;
-      const json=JSON.parse(txt.replace(/^[^(]+\(|\);?$/g,''));
-      if(!json.table||!json.table.rows||json.table.rows.length<1)continue;
-      // Try col A first, then col B
-      let names=[];
-      for(let col=0;col<3;col++){
-        names=[...new Set(json.table.rows.slice(1).map(row=>row.c&&row.c[col]&&row.c[col].v?String(row.c[col].v).trim():'').filter(Boolean))];
-        if(names.length>0)break;
-      }
-      if(names.length>0){
-        projects=names;saveCache();
-        if(manual)toast(`${names.length} projects loaded from "${tab}" tab`,'success');
-        buildAddProjDD();
-        if(importCurrentInv!==null)renderImportLineItems();
-        return;
-      }
-    }catch(e){continue;}
+  // Categories to skip — these are dropdown labels not project names
+  const SKIP=['***General***','Select an item below','Shop/Misc','Estimate','Inventory','Misc','Office','Off','Vacation','Holiday','Sick','Projects',''];
+  const url=`https://docs.google.com/spreadsheets/d/${TT_SHEET_ID}/gviz/tq?tqx=out:json&sheet=Projects&_=${Date.now()}`;
+  try{
+    const r=await fetch(url);
+    const txt=await r.text();
+    if(!txt.includes('table')){if(manual)toast('Could not reach TT Log sheet','danger');return;}
+    const json=JSON.parse(txt.replace(/^[^(]+\(|\);?$/g,''));
+    const allVals=(json.table.rows||[]).map(row=>row.c&&row.c[0]&&row.c[0].v?String(row.c[0].v).trim():'').filter(Boolean);
+    const names=[...new Set(allVals.filter(v=>!SKIP.includes(v)))];
+    if(names.length){
+      projects=names;saveCache();
+      if(manual)toast(`${names.length} projects loaded`,'success');
+      buildAddProjDD();
+      if(importCurrentInv!==null)renderImportLineItems();
+    }else{
+      if(manual)toast('No projects found — check TT Log sheet','danger');
+    }
+  }catch(e){
+    if(manual)toast('Could not load projects: '+e.message,'danger');
   }
-  if(manual)toast('Could not load projects — check sheet sharing','danger');
 }
 function startProjSync(){loadProjects();if(projTimer)clearInterval(projTimer);projTimer=setInterval(loadProjects,5*60*1000);}
 
@@ -1446,7 +1441,7 @@ function renderImportLineItems(){
         <div style="grid-column:1/-1">
           <div style="font-size:10px;font-weight:600;color:var(--accent);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:5px">Project / Stock <span style="color:var(--accent)">*</span></div>
           <select id="imp-proj-sel-${i}" onchange="onImportProjSel(${i},this.value)"
-            style="width:100%;padding:8px 10px;font-size:13px;border:1px solid var(--accent-dim);border-radius:var(--radius);background:var(--accent-bg);color:var(--text);font-family:var(--font);margin-bottom:6px">
+            style="width:100%;padding:8px 10px;font-size:13px;border:1px solid var(--accent-dim);border-radius:var(--radius);background:var(--surface2);color:var(--text);font-family:var(--font);margin-bottom:6px">
             <option value="">— select project or stock —</option>
             <option value="STOCK">📦 STOCK</option>
             ${projects.map(p=>`<option value="${p}" ${item._project===p?'selected':''}>${p}</option>`).join('')}
