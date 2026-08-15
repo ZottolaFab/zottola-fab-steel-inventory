@@ -974,6 +974,25 @@ async function updateInboxStatus(rowIndices, projectMap){
   await scriptWrite('writeSheet', {tab: TABS.inbox, rows: allRows});
 }
 
+// ── DUPLICATE CHECK ──────────────────────────────────────────────────
+function findDuplicates(newEntries){
+  // Check each new entry against existing inventory
+  // Match on: same size + same invoice number + same supplier
+  const dupes=[];
+  newEntries.forEach(e=>{
+    const match=inventory.find(existing=>
+      existing.size&&e.size&&
+      existing.size.trim().toLowerCase()===e.size.trim().toLowerCase()&&
+      existing.invoiceNum&&e.invoiceNum&&
+      existing.invoiceNum.trim()===e.invoiceNum.trim()&&
+      existing.supplier&&e.supplier&&
+      existing.supplier.trim().toLowerCase()===e.supplier.trim().toLowerCase()
+    );
+    if(match) dupes.push({entry:e, existing:match});
+  });
+  return dupes;
+}
+
 async function writeInventoryToSheet(){
   const rows=[INV_HEADER,...inventory.map(invToRow)];
   return await scriptWrite('writeSheet', {tab: TABS.inv, rows});
@@ -1118,6 +1137,17 @@ async function saveItem(){
     cancelEdit();toast('Entry updated','success');
   }else{
     const newItem={id:Date.now().toString(),location:loc,shape:shape!=='custom'?shape:size,size,wPerFt:wft,qty,qtyRemaining:qty,lenFt:ft||null,lenIn:inches||null,totalWeight:wTotal||null,costPerLb,totalCost,projectOrStock,docType,supplier,invoiceNum,poNum,grade,heatNumber,remarks,added:new Date().toISOString()};
+    // Check for duplicates
+    const dupes=findDuplicates([newItem]);
+    if(dupes.length){
+      const d=dupes[0];
+      openValidationModal(
+        'Possible duplicate entry',
+        `${d.entry.size} from ${d.entry.supplier} (Inv: ${d.entry.invoiceNum}) already exists in inventory. Added ${new Date(d.existing.added).toLocaleDateString()} — check before adding again.`
+      );
+      setSyncUI('ok','');
+      return;
+    }
     inventory.unshift(newItem);
     clearAddForm();toast('Added to inventory','success');
   }
@@ -1752,6 +1782,18 @@ async function commitImport(){
   }));
 
   // Add to local inventory and write to sheet
+  // Check for duplicates
+  const importDupes=findDuplicates(newEntries);
+  if(importDupes.length){
+    const names=importDupes.map(d=>`${d.entry.size} (${d.entry.invoiceNum})`).join(', ');
+    const proceed=confirm(`⚠️ Possible duplicates found:\n\n${names}\n\nThese items may already be in inventory. Add anyway?`);
+    if(!proceed){
+      document.getElementById('import-commit-btn').textContent='Confirm & add to inventory';
+      document.getElementById('import-commit-btn').disabled=false;
+      return;
+    }
+  }
+
   newEntries.forEach(e=>inventory.unshift(e));
   const result=await writeInventoryToSheet();
   if(!result||!result.success){
@@ -2091,6 +2133,18 @@ async function commitInboxReview(){
     ].filter(Boolean).join(' · '),
     added:new Date().toISOString()
   }));
+
+  // Check for duplicates before adding
+  const dupes=findDuplicates(newEntries);
+  if(dupes.length){
+    const names=dupes.map(d=>`${d.entry.size} (${d.entry.invoiceNum})`).join(', ');
+    const proceed=confirm(`⚠️ Possible duplicates found:\n\n${names}\n\nThese items may already be in inventory. Add anyway?`);
+    if(!proceed){
+      document.getElementById('inbox-commit-btn').textContent='Confirm assigned items & leave rest pending';
+      document.getElementById('inbox-commit-btn').disabled=false;
+      return;
+    }
+  }
 
   newEntries.forEach(e=>inventory.unshift(e));
   const result=await writeInventoryToSheet();
