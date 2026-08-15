@@ -265,6 +265,7 @@ h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,
   <button class="tab" onclick="switchTab('add',this)">Add material</button>
   <button class="tab" onclick="switchTab('log',this)">Usage log</button>
   <button class="tab" onclick="switchTab('lists',this)">Locations &amp; types</button>
+  <button class="tab" onclick="switchTab('consumables',this)"><i class="ti ti-tool" style="font-size:13px"></i> Consumables</button>
   <button class="tab" onclick="switchTab('backups',this)">Backups</button>
   <button class="tab" onclick="switchTab('settings',this)">Settings</button>
 </div>
@@ -524,6 +525,64 @@ h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,
   </div>
 </div>
 
+<!-- CONSUMABLES TAB -->
+<div class="content pad0" id="tab-consumables" style="display:none">
+  <div style="padding:14px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;z-index:5;background:var(--surface)">
+    <span style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:0.06em">Consumables log</span>
+    <div style="display:flex;gap:8px;align-items:center">
+      <span style="font-size:11px;color:var(--text3)" id="consumables-count"></span>
+      <button class="btn btn-primary btn-sm" onclick="openAddConsumable()"><i class="ti ti-plus"></i> Add</button>
+    </div>
+  </div>
+  <div style="padding:10px 14px;border-bottom:1px solid var(--border)">
+    <input type="text" id="consumables-search" placeholder="Search by description, part #, supplier, machine…"
+      style="width:100%;padding:8px 10px;font-size:13px;border:1px solid var(--border2);border-radius:var(--radius);background:var(--surface2);color:var(--text);font-family:var(--font)"
+      oninput="renderConsumables()">
+  </div>
+  <div id="consumables-list"></div>
+</div>
+
+<!-- ADD CONSUMABLE MODAL -->
+<div class="modal-bg" id="modal-consumable" onclick="closeModal('modal-consumable')">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-title">
+      <span id="modal-consumable-title">Add consumable</span>
+      <button class="btn btn-sm btn-icon" onclick="closeModal('modal-consumable')" aria-label="Close"><i class="ti ti-x"></i></button>
+    </div>
+    <input type="hidden" id="cons-edit-id">
+    <div class="field"><label>Date</label><input type="date" id="cons-date"></div>
+    <div class="field"><label>Supplier</label><input type="text" id="cons-supplier" placeholder="e.g. Hornet Cutting Systems"></div>
+    <div class="field-row">
+      <div class="field" style="margin-bottom:0"><label>Invoice #</label><input type="text" id="cons-invoice" placeholder="e.g. 0013362"></div>
+      <div class="field" style="margin-bottom:0"><label>Part #</label><input type="text" id="cons-partnum" placeholder="e.g. HYP220756"></div>
+    </div>
+    <div class="field" style="margin-top:10px"><label>Description</label><input type="text" id="cons-desc" placeholder="e.g. Cap HPR400XD 130A Noz Ret Ms"></div>
+    <div class="field"><label>Machine</label><input type="text" id="cons-machine" placeholder="e.g. Hypertherm HPR400, Lincoln Welder"></div>
+    <div class="field-row">
+      <div class="field" style="margin-bottom:0"><label>Qty</label><input type="number" id="cons-qty" min="1" placeholder="1" oninput="calcConsTotal()"></div>
+      <div class="field" style="margin-bottom:0"><label>Unit price ($)</label><input type="number" id="cons-unit-price" placeholder="0.00" step="0.01" oninput="calcConsTotal()"></div>
+    </div>
+    <div class="field" style="margin-top:10px"><label>Total cost ($)</label><input type="number" id="cons-total-cost" placeholder="auto-calculates" step="0.01"></div>
+    <div class="field">
+      <label>Project</label>
+      <select id="cons-project-sel" onchange="onConsProjSel(this.value)"
+        style="width:100%;padding:8px 10px;font-size:14px;border:1px solid var(--border2);border-radius:var(--radius);background:var(--surface2);color:var(--text);font-family:var(--font)">
+        <option value="">— select project or shop —</option>
+        <option value="SHOP">🔧 SHOP</option>
+      </select>
+      <div id="cons-project-new-wrap" style="display:none;margin-top:6px">
+        <input type="text" id="cons-project-new" placeholder="Type new project name"
+          style="width:100%;padding:8px 10px;font-size:14px;border:1px solid var(--accent-dim);border-radius:var(--radius);background:var(--accent-bg);color:var(--text);font-family:var(--font)">
+      </div>
+      <input type="hidden" id="cons-project" value="">
+    </div>
+    <div class="field"><label>Remarks</label><input type="text" id="cons-remarks" placeholder="Optional notes"></div>
+    <div class="field"><label>Entered by</label><input type="text" id="cons-entered-by" placeholder="Your name"></div>
+    <button class="btn btn-primary btn-full" onclick="saveConsumable()"><i class="ti ti-check"></i> <span id="cons-save-label">Add to log</span></button>
+    <button class="btn btn-full" id="cons-cancel-btn" onclick="cancelEditConsumable()" style="display:none;margin-top:6px"><i class="ti ti-x"></i> Cancel edit</button>
+  </div>
+</div>
+
 <!-- SETTINGS -->
 <div class="content" id="tab-settings" style="display:none">
   <div class="card">
@@ -681,7 +740,7 @@ h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,
 // ── CONFIG ───────────────────────────────────────────────────────────
 const SHEET_ID = '1BtRJEG7IaNveaekFgY3flAO-3cJ-ysKOfxfkkpeO-U0';
 const TT_SHEET_ID = '1IAm2tRj2hTmsO7hhHhkMsCZWXGD-vJz56sbPkJEl6zg';
-const TABS = { inv: 'Inventory', log: 'Usage Log', loc: 'Locations', types: 'Material Types', inbox: 'Invoice Inbox' };
+const TABS = { inv: 'Inventory', log: 'Usage Log', loc: 'Locations', types: 'Material Types', inbox: 'Invoice Inbox', consumables: 'Consumables' };
 const PROJ_TAB = 'Projects';
 const SYNC_INTERVAL = 60000; // 60 seconds
 // Apps Script URL handles all writes — no OAuth needed
@@ -707,7 +766,7 @@ const SG=[{label:'W Shapes',keys:Object.keys(AISC).filter(k=>k.match(/^W\d/)&&!k
   {label:'Angles — Unequal Leg',keys:['L2-1/2x2x3/16','L2-1/2x2x1/4','L2-1/2x2x5/16','L3x2x3/16','L3x2x1/4','L3x2x5/16','L3x2x3/8','L3x2-1/2x1/4','L3x2-1/2x5/16','L3x2-1/2x3/8','L3-1/2x2-1/2x1/4','L3-1/2x2-1/2x5/16','L3-1/2x2-1/2x3/8','L3-1/2x3x1/4','L3-1/2x3x5/16','L3-1/2x3x3/8','L4x3x1/4','L4x3x5/16','L4x3x3/8','L4x3x1/2','L4x3-1/2x1/4','L4x3-1/2x5/16','L4x3-1/2x3/8','L4x3-1/2x1/2','L5x3x1/4','L5x3x5/16','L5x3x3/8','L5x3x1/2','L5x3-1/2x1/4','L5x3-1/2x5/16','L5x3-1/2x3/8','L5x3-1/2x1/2','L6x3-1/2x5/16','L6x3-1/2x3/8','L6x3-1/2x1/2','L6x4x5/16','L6x4x3/8','L6x4x1/2','L6x4x5/8','L7x4x3/8','L7x4x1/2','L7x4x3/4','L8x4x1/2','L8x4x5/8','L8x6x1/2','L8x6x5/8','L8x6x3/4']},{label:'WT Shapes',keys:Object.keys(AISC).filter(k=>k.startsWith('WT'))},{label:'Pipe STD',keys:Object.keys(AISC).filter(k=>k.includes('STD'))},{label:'Pipe XS',keys:Object.keys(AISC).filter(k=>k.endsWith(' XS'))},{label:'Pipe XXS',keys:Object.keys(AISC).filter(k=>k.includes('XXS'))}];
 
 // ── STATE ────────────────────────────────────────────────────────────
-let inventory=[],usageLog=[],locations=[],customTypes=[],projects=[],backupLog=[],inboxItems=[];
+let inventory=[],usageLog=[],locations=[],customTypes=[],projects=[],backupLog=[],inboxItems=[],consumables=[];
 let cfg={apiKey:'AIzaSyAQaFH4tPD7rWgh3rvJQJlI2d4_ZTxo070'};
 let pendingUseItemId=null,npField=null,npVal='',clearBackupDL=false;
 let kbShift=false,kbNum=false,kbText='';
@@ -760,6 +819,7 @@ function sheetsUpdate(tab,range,values){
 }
 
 // Row formats
+const CONSUMABLES_HEADER=['Date','Supplier','Invoice #','Part #','Description','Machine','Qty','Unit Price','Total Cost','Project','Remarks','Entered By'];
 const INBOX_HEADER=['Supplier','Invoice #','PO #','Invoice Date','Doc Type','Shape','Size','Qty','Length Ft','Length In','Weight Lbs','Cost Per Lb','Total Cost','Grade','Heat #','Remarks','Status','Project'];
 const INV_HEADER=['ID','Location','Shape','Size','Wt/ft','Qty','Qty Remaining','Len Ft','Len In','Total Wt (lbs)','Cost/lb','Total Cost','Project/Stock','Doc Type','Status','Supplier','Invoice #','PO #','Invoice Date','Grade','Heat #','Remarks','Added','Edited'];
 const LOG_HEADER=['ID','Date','Time','Job','Shape','Size','Location','Qty Used','Qty Remaining','Length','Remarks'];
@@ -804,6 +864,17 @@ async function syncAll(manual=false){
     const typeRows=await readTab(TABS.types);
     if(typeRows!==null) customTypes=typeRows.map(r=>({id:r[0],name:r[1]||'',wft:r[2]||'',category:r[3]||''}));
 
+    // Read consumables
+    const consRows=await readTab(TABS.consumables);
+    if(consRows!==null){
+      consumables=consRows.filter(r=>r&&r[4]).map((r,i)=>({
+        id:r[0]&&r[0].toString().startsWith('ZFC')?r[0]:'ZFC'+Date.now()+i,
+        date:r[0]||'',supplier:r[1]||'',invoiceNum:r[2]||'',partNum:r[3]||'',
+        desc:r[4]||'',machine:r[5]||'',qty:parseInt(r[6])||1,
+        unitPrice:parseFloat(r[7])||null,totalCost:parseFloat(r[8])||null,
+        project:r[9]||'',remarks:r[10]||'',enteredBy:r[11]||''
+      }));
+    }
     // Read inbox
     const inboxRows=await readTab(TABS.inbox);
     if(inboxRows!==null){
@@ -1375,7 +1446,7 @@ function renderCurrentTab(){
 
 // ── TAB SWITCHING ────────────────────────────────────────────────────
 function switchTab(name,btn){
-  ['inventory','add','log','backups','lists','settings','import'].forEach(t=>document.getElementById('tab-'+t).style.display='none');
+  ['inventory','add','log','backups','lists','settings','import','consumables'].forEach(t=>document.getElementById('tab-'+t).style.display='none');
   document.getElementById('tab-'+name).style.display='flex';
   document.querySelectorAll('.tab').forEach(b=>b.classList.remove('active'));
   btn.classList.add('active');
@@ -1383,6 +1454,7 @@ function switchTab(name,btn){
   if(name==='inventory')renderInventory();
   if(name==='add'){buildAddProjDD();}
   if(name==='import'){renderImportSelector();renderInboxSection();}
+  if(name==='consumables'){buildConsProjDD();renderConsumables();}
   else if(name==='log')renderLog();
   else if(name==='backups')renderBackupLog();
   else if(name==='lists')renderLists();
@@ -1693,6 +1765,156 @@ async function commitImport(){
   document.getElementById('import-commit-btn').textContent='Confirm & add to inventory';
   document.getElementById('import-commit-btn').disabled=false;
   toast('Added '+newEntries.length+' items to inventory','success');
+}
+
+// ── CONSUMABLES ───────────────────────────────────────────────────────
+function buildConsProjDD(){
+  const sel=document.getElementById('cons-project-sel');
+  if(!sel)return;
+  const cur=document.getElementById('cons-project')?.value||'';
+  sel.innerHTML='<option value="">— select project or shop —</option><option value="SHOP">🔧 SHOP</option>';
+  projects.forEach(p=>{const o=document.createElement('option');o.value=p;o.textContent=p;if(p===cur)o.selected=true;sel.appendChild(o);});
+  const add=document.createElement('option');add.value='__new__';add.textContent='+ Add new project…';sel.appendChild(add);
+}
+
+function onConsProjSel(val){
+  const wrap=document.getElementById('cons-project-new-wrap');
+  if(val==='__new__'){wrap.style.display='block';document.getElementById('cons-project').value='';document.getElementById('cons-project-new').focus();}
+  else{wrap.style.display='none';document.getElementById('cons-project').value=val;}
+}
+
+function calcConsTotal(){
+  const qty=parseFloat(document.getElementById('cons-qty').value)||0;
+  const unit=parseFloat(document.getElementById('cons-unit-price').value)||0;
+  if(qty&&unit)document.getElementById('cons-total-cost').value=(qty*unit).toFixed(2);
+}
+
+function renderConsumables(){
+  const list=document.getElementById('consumables-list');
+  const cnt=document.getElementById('consumables-count');
+  const q=(document.getElementById('consumables-search')?.value||'').toLowerCase();
+  if(!consumables.length){
+    list.innerHTML='<div class="empty"><span class="empty-icon"><i class="ti ti-tool"></i></span>No consumables logged yet.<br>Tap Add to get started.</div>';
+    cnt.textContent='';return;
+  }
+  const filtered=q?consumables.filter(c=>
+    (c.desc||'').toLowerCase().includes(q)||
+    (c.partNum||'').toLowerCase().includes(q)||
+    (c.supplier||'').toLowerCase().includes(q)||
+    (c.machine||'').toLowerCase().includes(q)||
+    (c.project||'').toLowerCase().includes(q)
+  ):consumables;
+  cnt.textContent=filtered.length+' entries';
+  list.innerHTML=filtered.map(c=>`
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden;margin:8px 14px">
+      <div style="padding:10px 12px;background:var(--surface2);display:flex;align-items:flex-start;gap:8px;border-bottom:1px solid var(--border)">
+        <div style="flex:1;min-width:0">
+          <div style="font-size:14px;font-weight:600">${c.desc||'—'}</div>
+          <div style="font-size:11px;color:var(--text3);margin-top:2px">${c.supplier||''}${c.partNum?' · '+c.partNum:''}${c.machine?' · '+c.machine:''}</div>
+        </div>
+        <div style="text-align:right;flex-shrink:0">
+          <div style="font-size:13px;font-weight:600;color:var(--success)">${c.totalCost?'$'+parseFloat(c.totalCost).toLocaleString('en-US',{minimumFractionDigits:2}):'—'}</div>
+          <div style="font-size:11px;color:var(--text3);margin-top:1px">${c.date||''}</div>
+        </div>
+      </div>
+      <div style="padding:10px 12px;display:flex;flex-wrap:wrap;gap:5px;align-items:center">
+        ${c.qty?`<span style="font-size:11px;color:var(--text2);background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:2px 7px">Qty: ${c.qty}</span>`:''}
+        ${c.unitPrice?`<span style="font-size:11px;color:var(--text2);background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:2px 7px">$${parseFloat(c.unitPrice).toFixed(2)}/ea</span>`:''}
+        ${c.invoiceNum?`<span style="font-size:11px;color:var(--text2);background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:2px 7px">Inv: ${c.invoiceNum}</span>`:''}
+        ${c.project?`<span style="font-size:11px;color:var(--accent);background:var(--accent-bg);border:1px solid var(--accent-dim);border-radius:4px;padding:2px 7px">${c.project}</span>`:''}
+        ${c.enteredBy?`<span style="font-size:11px;color:var(--text3)">by ${c.enteredBy}</span>`:''}
+        <div style="margin-left:auto;display:flex;gap:5px">
+          <button class="btn btn-sm btn-icon" onclick="editConsumable('${c.id}')" aria-label="Edit"><i class="ti ti-pencil"></i></button>
+          <button class="btn btn-sm btn-icon btn-danger" onclick="deleteConsumable('${c.id}')" aria-label="Delete"><i class="ti ti-trash"></i></button>
+        </div>
+      </div>
+      ${c.remarks?`<div style="padding:5px 12px 9px;font-size:12px;color:var(--text3);background:var(--surface2);border-top:1px solid var(--border)">${c.remarks}</div>`:''}
+    </div>`).join('');
+}
+
+function openAddConsumable(){
+  document.getElementById('cons-edit-id').value='';
+  document.getElementById('modal-consumable-title').textContent='Add consumable';
+  document.getElementById('cons-save-label').textContent='Add to log';
+  document.getElementById('cons-cancel-btn').style.display='none';
+  ['cons-supplier','cons-invoice','cons-partnum','cons-desc','cons-machine','cons-qty','cons-unit-price','cons-total-cost','cons-remarks','cons-entered-by'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+  document.getElementById('cons-date').value=new Date().toISOString().slice(0,10);
+  document.getElementById('cons-project').value='';
+  document.getElementById('cons-project-sel').value='';
+  document.getElementById('cons-project-new-wrap').style.display='none';
+  buildConsProjDD();
+  openModal('modal-consumable');
+}
+
+function editConsumable(id){
+  const c=consumables.find(x=>x.id===id);if(!c)return;
+  document.getElementById('cons-edit-id').value=id;
+  document.getElementById('modal-consumable-title').textContent='Edit consumable';
+  document.getElementById('cons-save-label').textContent='Save changes';
+  document.getElementById('cons-cancel-btn').style.display='block';
+  document.getElementById('cons-date').value=c.date||new Date().toISOString().slice(0,10);
+  document.getElementById('cons-supplier').value=c.supplier||'';
+  document.getElementById('cons-invoice').value=c.invoiceNum||'';
+  document.getElementById('cons-partnum').value=c.partNum||'';
+  document.getElementById('cons-desc').value=c.desc||'';
+  document.getElementById('cons-machine').value=c.machine||'';
+  document.getElementById('cons-qty').value=c.qty||'';
+  document.getElementById('cons-unit-price').value=c.unitPrice||'';
+  document.getElementById('cons-total-cost').value=c.totalCost||'';
+  document.getElementById('cons-remarks').value=c.remarks||'';
+  document.getElementById('cons-entered-by').value=c.enteredBy||'';
+  document.getElementById('cons-project').value=c.project||'';
+  buildConsProjDD();
+  document.getElementById('cons-project-sel').value=c.project||'';
+  openModal('modal-consumable');
+}
+
+function cancelEditConsumable(){
+  closeModal('modal-consumable');
+}
+
+async function saveConsumable(){
+  const editId=document.getElementById('cons-edit-id').value;
+  const projSel=document.getElementById('cons-project-sel').value;
+  const projNew=document.getElementById('cons-project-new').value.trim();
+  const project=projSel==='__new__'?projNew:(document.getElementById('cons-project').value||projSel||'');
+  const entry={
+    id:editId||'ZFC'+Date.now(),
+    date:document.getElementById('cons-date').value||new Date().toISOString().slice(0,10),
+    supplier:document.getElementById('cons-supplier').value.trim(),
+    invoiceNum:document.getElementById('cons-invoice').value.trim(),
+    partNum:document.getElementById('cons-partnum').value.trim(),
+    desc:document.getElementById('cons-desc').value.trim(),
+    machine:document.getElementById('cons-machine').value.trim(),
+    qty:parseInt(document.getElementById('cons-qty').value)||1,
+    unitPrice:parseFloat(document.getElementById('cons-unit-price').value)||null,
+    totalCost:parseFloat(document.getElementById('cons-total-cost').value)||null,
+    project,
+    remarks:document.getElementById('cons-remarks').value.trim(),
+    enteredBy:document.getElementById('cons-entered-by').value.trim()
+  };
+  if(!entry.desc){toast('Enter a description','danger');return;}
+  if(editId){
+    const idx=consumables.findIndex(c=>c.id===editId);
+    if(idx>=0)consumables[idx]=entry;
+  }else{
+    consumables.unshift(entry);
+  }
+  // Write all consumables to sheet
+  const rows=[CONSUMABLES_HEADER,...consumables.map(c=>[c.date,c.supplier,c.invoiceNum,c.partNum,c.desc,c.machine,c.qty,c.unitPrice||'',c.totalCost||'',c.project,c.remarks,c.enteredBy])];
+  await scriptWrite('writeSheet',{tab:TABS.consumables,rows});
+  closeModal('modal-consumable');
+  renderConsumables();
+  toast(editId?'Consumable updated':'Consumable added','success');
+}
+
+async function deleteConsumable(id){
+  if(!confirm('Delete this consumable entry?'))return;
+  consumables=consumables.filter(c=>c.id!==id);
+  const rows=[CONSUMABLES_HEADER,...consumables.map(c=>[c.date,c.supplier,c.invoiceNum,c.partNum,c.desc,c.machine,c.qty,c.unitPrice||'',c.totalCost||'',c.project,c.remarks,c.enteredBy])];
+  await scriptWrite('writeSheet',{tab:TABS.consumables,rows});
+  renderConsumables();
+  toast('Entry deleted','success');
 }
 
 function renderInboxSection(){
