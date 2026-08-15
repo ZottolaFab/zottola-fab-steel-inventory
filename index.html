@@ -261,7 +261,7 @@ h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,
 <!-- TABS -->
 <div class="tabs">
   <button class="tab active" onclick="switchTab('inventory',this)">Inventory</button>
-  <button class="tab" onclick="switchTab('import',this)"><i class="ti ti-file-import" style="font-size:13px"></i> Import</button>
+  <button class="tab" onclick="switchTab('import',this)"><i class="ti ti-file-import" style="font-size:13px"></i> Import <span id="inbox-badge" style="display:none;background:var(--danger);color:#fff;border-radius:20px;padding:1px 6px;font-size:10px;margin-left:2px">0</span></button>
   <button class="tab" onclick="switchTab('add',this)">Add material</button>
   <button class="tab" onclick="switchTab('log',this)">Usage log</button>
   <button class="tab" onclick="switchTab('lists',this)">Locations &amp; types</button>
@@ -454,6 +454,18 @@ h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,
       </div>
     </div>
     <div style="padding:12px;display:flex;flex-direction:column;gap:8px" id="import-inv-list"></div>
+    <div id="inbox-section" style="display:none">
+      <div style="padding:10px 14px;border-top:1px solid var(--border);border-bottom:1px solid var(--border);background:var(--surface2);display:flex;justify-content:space-between;align-items:center">
+        <span style="font-size:11px;font-weight:600;color:var(--accent);text-transform:uppercase;letter-spacing:0.06em"><i class="ti ti-inbox"></i> Invoice Inbox</span>
+        <span style="font-size:11px;color:var(--text3)" id="inbox-count"></span>
+      </div>
+      <div style="padding:12px;display:flex;flex-direction:column;gap:8px" id="inbox-list"></div>
+      <div style="padding:0 12px 12px">
+        <button class="btn btn-primary btn-full" onclick="reviewInbox()" id="review-inbox-btn" style="display:none">
+          <i class="ti ti-checklist"></i> Review &amp; confirm all inbox items
+        </button>
+      </div>
+    </div>
   </div>
   <div id="import-review-view" style="display:none;flex-direction:column;gap:12px;padding:14px">
     <button class="btn btn-sm" onclick="importBackToSelector()" style="align-self:flex-start"><i class="ti ti-arrow-left"></i> Back</button>
@@ -476,7 +488,33 @@ h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,
     <button class="btn btn-primary btn-full" onclick="commitImport()" id="import-commit-btn"><i class="ti ti-database-import"></i> Confirm &amp; add to inventory</button>
     <p style="font-size:11px;color:var(--text3);text-align:center;padding-bottom:20px">Enter project name or STOCK for every line &middot; Toggle off items to exclude</p>
   </div>
-  <div id="import-result-view" style="display:none;padding:14px">
+  <div id="import-inbox-review" style="display:none;flex-direction:column;gap:12px;padding:14px">
+    <button class="btn btn-sm" onclick="importBackToSelector()" style="align-self:flex-start"><i class="ti ti-arrow-left"></i> Back</button>
+    <div style="background:var(--accent-bg);border:1px solid var(--accent-dim);border-radius:var(--radius);padding:10px 12px;font-size:12px;color:var(--accent)">
+      <i class="ti ti-info-circle"></i> These items were entered via Invoice Inbox. Assign a project to each line then confirm.
+    </div>
+    <div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:0.06em;display:flex;justify-content:space-between;align-items:center">
+      Inbox items <span style="background:var(--accent-bg);color:var(--accent);border-radius:20px;padding:2px 8px;font-size:11px" id="inbox-review-count"></span>
+    </div>
+    <div id="inbox-review-items"></div>
+    <div class="card">
+      <div class="card-hd"><span class="card-label">Summary</span></div>
+      <div class="card-body">
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;text-align:center">
+          <div><div style="font-size:18px;font-weight:600;color:var(--accent)" id="inbox-sum-items">-</div><div style="font-size:11px;color:var(--text3);margin-top:2px">Items</div></div>
+          <div><div style="font-size:18px;font-weight:600;color:var(--accent)" id="inbox-sum-wt">-</div><div style="font-size:11px;color:var(--text3);margin-top:2px">Total lbs</div></div>
+          <div><div style="font-size:18px;font-weight:600;color:var(--accent)" id="inbox-sum-cost">-</div><div style="font-size:11px;color:var(--text3);margin-top:2px">Total cost</div></div>
+        </div>
+      </div>
+    </div>
+    <div style="background:var(--danger-bg);border:1px solid var(--danger);border-radius:var(--radius);padding:10px 12px;font-size:13px;color:var(--danger);display:none" id="inbox-review-error"></div>
+    <button class="btn btn-primary btn-full" onclick="commitInboxReview()" id="inbox-commit-btn">
+      <i class="ti ti-database-import"></i> Confirm &amp; add to inventory
+    </button>
+    <p style="font-size:11px;color:var(--text3);text-align:center;padding-bottom:20px">Assign project or STOCK to every line · Toggle off to exclude</p>
+  </div>
+
+<div id="import-result-view" style="display:none;padding:14px">
     <div style="background:var(--success-bg);border:1px solid var(--success);border-radius:12px;padding:20px;text-align:center;margin-bottom:12px">
       <div style="font-size:36px;margin-bottom:8px">&#x2705;</div>
       <div style="font-size:16px;font-weight:600;color:var(--success);margin-bottom:6px">Added to inventory</div>
@@ -643,7 +681,7 @@ h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,
 // ── CONFIG ───────────────────────────────────────────────────────────
 const SHEET_ID = '1BtRJEG7IaNveaekFgY3flAO-3cJ-ysKOfxfkkpeO-U0';
 const TT_SHEET_ID = '1IAm2tRj2hTmsO7hhHhkMsCZWXGD-vJz56sbPkJEl6zg';
-const TABS = { inv: 'Inventory', log: 'Usage Log', loc: 'Locations', types: 'Material Types' };
+const TABS = { inv: 'Inventory', log: 'Usage Log', loc: 'Locations', types: 'Material Types', inbox: 'Invoice Inbox' };
 const PROJ_TAB = 'Projects';
 const SYNC_INTERVAL = 60000; // 60 seconds
 // Apps Script URL handles all writes — no OAuth needed
@@ -669,7 +707,7 @@ const SG=[{label:'W Shapes',keys:Object.keys(AISC).filter(k=>k.match(/^W\d/)&&!k
   {label:'Angles — Unequal Leg',keys:['L2-1/2x2x3/16','L2-1/2x2x1/4','L2-1/2x2x5/16','L3x2x3/16','L3x2x1/4','L3x2x5/16','L3x2x3/8','L3x2-1/2x1/4','L3x2-1/2x5/16','L3x2-1/2x3/8','L3-1/2x2-1/2x1/4','L3-1/2x2-1/2x5/16','L3-1/2x2-1/2x3/8','L3-1/2x3x1/4','L3-1/2x3x5/16','L3-1/2x3x3/8','L4x3x1/4','L4x3x5/16','L4x3x3/8','L4x3x1/2','L4x3-1/2x1/4','L4x3-1/2x5/16','L4x3-1/2x3/8','L4x3-1/2x1/2','L5x3x1/4','L5x3x5/16','L5x3x3/8','L5x3x1/2','L5x3-1/2x1/4','L5x3-1/2x5/16','L5x3-1/2x3/8','L5x3-1/2x1/2','L6x3-1/2x5/16','L6x3-1/2x3/8','L6x3-1/2x1/2','L6x4x5/16','L6x4x3/8','L6x4x1/2','L6x4x5/8','L7x4x3/8','L7x4x1/2','L7x4x3/4','L8x4x1/2','L8x4x5/8','L8x6x1/2','L8x6x5/8','L8x6x3/4']},{label:'WT Shapes',keys:Object.keys(AISC).filter(k=>k.startsWith('WT'))},{label:'Pipe STD',keys:Object.keys(AISC).filter(k=>k.includes('STD'))},{label:'Pipe XS',keys:Object.keys(AISC).filter(k=>k.endsWith(' XS'))},{label:'Pipe XXS',keys:Object.keys(AISC).filter(k=>k.includes('XXS'))}];
 
 // ── STATE ────────────────────────────────────────────────────────────
-let inventory=[],usageLog=[],locations=[],customTypes=[],projects=[],backupLog=[];
+let inventory=[],usageLog=[],locations=[],customTypes=[],projects=[],backupLog=[],inboxItems=[];
 let cfg={apiKey:'AIzaSyAQaFH4tPD7rWgh3rvJQJlI2d4_ZTxo070'};
 let pendingUseItemId=null,npField=null,npVal='',clearBackupDL=false;
 let kbShift=false,kbNum=false,kbText='';
@@ -722,6 +760,7 @@ function sheetsUpdate(tab,range,values){
 }
 
 // Row formats
+const INBOX_HEADER=['Supplier','Invoice #','PO #','Invoice Date','Doc Type','Shape','Size','Qty','Length Ft','Length In','Weight Lbs','Cost Per Lb','Total Cost','Grade','Heat #','Remarks','Status','Project'];
 const INV_HEADER=['ID','Location','Shape','Size','Wt/ft','Qty','Qty Remaining','Len Ft','Len In','Total Wt (lbs)','Cost/lb','Total Cost','Project/Stock','Doc Type','Status','Supplier','Invoice #','PO #','Invoice Date','Grade','Heat #','Remarks','Added','Edited'];
 const LOG_HEADER=['ID','Date','Time','Job','Shape','Size','Location','Qty Used','Qty Remaining','Length','Remarks'];
 const LOC_HEADER=['ID','Name','Description'];
@@ -765,6 +804,20 @@ async function syncAll(manual=false){
     const typeRows=await readTab(TABS.types);
     if(typeRows!==null) customTypes=typeRows.map(r=>({id:r[0],name:r[1]||'',wft:r[2]||'',category:r[3]||''}));
 
+    // Read inbox
+    const inboxRows=await readTab(TABS.inbox);
+    if(inboxRows!==null){
+      inboxItems=inboxRows.filter(r=>r&&r[0]&&(!r[16]||r[16].toString().trim()==='')&&r[6]).map((r,i)=>({
+        _rowIdx:i+2, // +2 for header + 1-based
+        supplier:r[0]||'',invoiceNum:r[1]||'',poNum:r[2]||'',invoiceDate:r[3]||'',
+        docType:r[4]||'Invoice',shape:r[5]||'',size:r[6]||'',qty:parseInt(r[7])||1,
+        lenFt:parseFloat(r[8])||null,lenIn:parseInt(r[9])||null,
+        weightLbs:parseFloat(r[10])||null,costPerLb:parseFloat(r[11])||null,
+        totalCost:parseFloat(r[12])||null,grade:r[13]||'',heat:r[14]||'',remarks:r[15]||'',
+        status:r[16]||'',project:r[17]||'',
+        _included:true,_project:r[17]||'',_location:''
+      }));
+    }
     sheetsReady=true;
     const t=new Date().toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});
     setSyncUI('ok',`synced ${t}`);
@@ -773,6 +826,7 @@ async function syncAll(manual=false){
     if(manual) toast('Synced from sheet','success');
     renderCurrentTab();
     buildLocDD();buildShapeDD();
+    renderInboxSection();
   }catch(e){
     setSyncUI('err','sync failed');
     document.getElementById('sheets-status').className='status-pill s-err';
@@ -806,6 +860,36 @@ async function scriptWrite(action, data){
 
 async function appendRowsToSheet(tab, rows, header){
   return await scriptWrite('appendRows', {tab, rows, header});
+}
+
+async function markInboxRowsImported(rowIndices, projectMap){
+  // Write 'Imported' to Status col (col Q = 17) and project to col R (18) for each row
+  if(!rowIndices.length) return;
+  for(const idx of rowIndices){
+    const proj = projectMap[idx] || '';
+    await scriptWrite('appendRow',{
+      tab: TABS.inbox,
+      _updateRow: idx,
+      _updateCols: {17: 'Imported', 18: proj}
+    });
+  }
+}
+
+// Simpler approach — rewrite entire inbox with status updated
+async function updateInboxStatus(rowIndices, projectMap){
+  if(!cfg.apiKey) return;
+  // Re-read inbox, mark rows as imported, write back
+  const inboxRows = await readTab(TABS.inbox);
+  if(!inboxRows) return;
+  rowIndices.forEach(idx=>{
+    const rowIdx = idx - 2; // convert back to array index
+    if(inboxRows[rowIdx]){
+      inboxRows[rowIdx][16] = 'Imported';
+      inboxRows[rowIdx][17] = projectMap[idx] || inboxRows[rowIdx][17] || '';
+    }
+  });
+  const rows = [INBOX_HEADER, ...inboxRows];
+  await scriptWrite('writeSheet', {tab: TABS.inbox, rows});
 }
 
 async function writeInventoryToSheet(){
@@ -1298,7 +1382,7 @@ function switchTab(name,btn){
   currentTab=name;
   if(name==='inventory')renderInventory();
   if(name==='add'){buildAddProjDD();}
-  if(name==='import'){renderImportSelector();}
+  if(name==='import'){renderImportSelector();renderInboxSection();}
   else if(name==='log')renderLog();
   else if(name==='backups')renderBackupLog();
   else if(name==='lists')renderLists();
@@ -1611,13 +1695,199 @@ async function commitImport(){
   toast('Added '+newEntries.length+' items to inventory','success');
 }
 
+function renderInboxSection(){
+  const badge=document.getElementById('inbox-badge');
+  const section=document.getElementById('inbox-section');
+  const inboxList=document.getElementById('inbox-list');
+  const inboxCount=document.getElementById('inbox-count');
+  const reviewBtn=document.getElementById('review-inbox-btn');
+  if(!inboxItems||!inboxItems.length){
+    section.style.display='none';
+    if(badge)badge.style.display='none';
+    return;
+  }
+  section.style.display='block';
+  if(badge){badge.style.display='inline';badge.textContent=inboxItems.length;}
+  inboxCount.textContent=inboxItems.length+' pending';
+  reviewBtn.style.display='block';
+  inboxList.innerHTML=inboxItems.map((item,i)=>`
+    <div style="background:var(--surface);border:1px solid var(--accent-dim);border-radius:10px;padding:12px;display:flex;align-items:flex-start;gap:10px">
+      <div style="width:24px;height:24px;border-radius:50%;background:var(--accent-bg);color:var(--accent);font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0">${i+1}</div>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:13px;font-weight:600">${item.size||'—'}</div>
+        <div style="font-size:11px;color:var(--text3);margin-top:2px">${item.shape} · ${item.qty} pcs · ${item.supplier} · ${item.invoiceDate}</div>
+        <div style="font-size:11px;color:var(--accent);margin-top:2px">${item.docType==='PO'?'📋 Purchase Order':'✓ Invoice'} ${item.totalCost?'· $'+parseFloat(item.totalCost).toLocaleString('en-US',{minimumFractionDigits:2}):''}</div>
+      </div>
+    </div>`).join('');
+}
+
+function reviewInbox(){
+  // Show inbox review view
+  document.getElementById('import-selector-view').style.display='none';
+  document.getElementById('import-review-view').style.display='none';
+  document.getElementById('import-inbox-review').style.display='flex';
+  document.getElementById('import-result-view').style.display='none';
+  renderInboxReviewItems();
+}
+
+function renderInboxReviewItems(){
+  document.getElementById('inbox-review-count').textContent=inboxItems.length+' items';
+  const list=document.getElementById('inbox-review-items');
+  list.innerHTML='';
+  inboxItems.forEach((item,i)=>{
+    const div=document.createElement('div');
+    div.id='inbx-li-'+i;
+    div.style.cssText='background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:8px;'+(item._included?'':'opacity:0.4;border-style:dashed');
+    div.innerHTML=`
+      <div style="padding:10px 12px;background:var(--surface2);display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--border)">
+        <div style="width:22px;height:22px;border-radius:50%;background:var(--accent-bg);color:var(--accent);font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0">${i+1}</div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:14px;font-weight:600">${item.size||'—'}</div>
+          <div style="font-size:11px;color:var(--text3);margin-top:1px">${item.shape} · ${item.qty} pcs · ${fmtLen(item.lenFt,item.lenIn)} ea · ${item.supplier}</div>
+        </div>
+        <div style="font-size:13px;font-weight:600;color:var(--success);white-space:nowrap">${item.totalCost?'$'+parseFloat(item.totalCost).toLocaleString('en-US',{minimumFractionDigits:2}):'—'}</div>
+        <button onclick="toggleInboxItem(${i})" id="inbx-toggle-${i}" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:15px;padding:2px 6px">
+          <i class="ti ti-${item._included?'eye':'eye-off'}"></i>
+        </button>
+      </div>
+      <div style="padding:12px;display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div><div style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:3px">Weight</div><div style="font-size:13px;color:var(--text2)">${item.weightLbs?parseFloat(item.weightLbs).toLocaleString('en-US')+' lbs':'—'}</div></div>
+        <div><div style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:3px">Cost/lb</div><div style="font-size:13px;color:var(--accent);font-weight:500">${item.costPerLb?'$'+parseFloat(item.costPerLb).toFixed(4):'—'}</div></div>
+        <div><div style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:3px">Grade</div><div style="font-size:13px;color:var(--text2)">${item.grade||'—'}</div></div>
+        <div><div style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:3px">Doc type</div><div style="font-size:13px;color:${item.docType==='PO'?'#60a5fa':'var(--success)'}">${item.docType==='PO'?'📋 PO':'✓ Invoice'}</div></div>
+        <div style="grid-column:1/-1">
+          <div style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:3px">Site location (optional)</div>
+          <input type="text" placeholder="e.g. Bay 3, Rack A" style="width:100%;padding:8px 10px;font-size:13px;border:1px solid var(--border2);border-radius:var(--radius);background:var(--surface2);color:var(--text);font-family:var(--font)"
+            oninput="inboxItems[${i}]._location=this.value" value="${item._location||''}">
+        </div>
+        <div style="grid-column:1/-1">
+          <div style="font-size:10px;font-weight:600;color:var(--accent);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:5px">Project / Stock <span style="color:var(--accent)">*</span></div>
+          <select id="inbx-proj-${i}" onchange="onInboxProjSel(${i},this.value)"
+            style="width:100%;padding:8px 10px;font-size:13px;border:1px solid var(--accent-dim);border-radius:var(--radius);background:var(--surface2);color:var(--text);font-family:var(--font);margin-bottom:6px">
+            <option value="">— select project or stock —</option>
+            <option value="STOCK">📦 STOCK</option>
+            ${projects.map(p=>`<option value="${p}" ${item._project===p?'selected':''}>${p}</option>`).join('')}
+            <option value="__new__">+ Add new project…</option>
+          </select>
+          <div id="inbx-proj-new-${i}" style="display:none">
+            <input type="text" placeholder="Type new project name" id="inbx-proj-newval-${i}"
+              style="width:100%;padding:8px 10px;font-size:13px;border:1px solid var(--accent-dim);border-radius:var(--radius);background:var(--accent-bg);color:var(--text);font-family:var(--font)"
+              oninput="inboxItems[${i}]._project=this.value">
+          </div>
+        </div>
+        ${item.remarks?`<div style="grid-column:1/-1;font-size:11px;color:var(--text3);background:var(--surface3);border-radius:6px;padding:6px 8px">${item.remarks}</div>`:''}
+      </div>`;
+    list.appendChild(div);
+  });
+  updateInboxSummary();
+}
+
+function toggleInboxItem(i){
+  inboxItems[i]._included=!inboxItems[i]._included;
+  const el=document.getElementById('inbx-li-'+i);
+  el.style.opacity=inboxItems[i]._included?'1':'0.4';
+  el.style.borderStyle=inboxItems[i]._included?'solid':'dashed';
+  document.getElementById('inbx-toggle-'+i).innerHTML=`<i class="ti ti-${inboxItems[i]._included?'eye':'eye-off'}"></i>`;
+  updateInboxSummary();
+}
+
+function onInboxProjSel(i,val){
+  const nd=document.getElementById('inbx-proj-new-'+i);
+  if(val==='__new__'){nd.style.display='block';inboxItems[i]._project='';document.getElementById('inbx-proj-newval-'+i)?.focus();}
+  else{nd.style.display='none';inboxItems[i]._project=val;}
+}
+
+function updateInboxSummary(){
+  const inc=inboxItems.filter(i=>i._included);
+  const wt=inc.reduce((a,i)=>a+(parseFloat(i.weightLbs)||0),0);
+  const cost=inc.reduce((a,i)=>a+(parseFloat(i.totalCost)||0),0);
+  document.getElementById('inbox-sum-items').textContent=inc.length;
+  document.getElementById('inbox-sum-wt').textContent=wt.toLocaleString('en-US',{maximumFractionDigits:0});
+  document.getElementById('inbox-sum-cost').textContent='$'+cost.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+}
+
+async function commitInboxReview(){
+  const included=inboxItems.filter(i=>i._included);
+  if(!included.length){toast('No items included','danger');return;}
+  const missing=included.find(i=>!i._project.trim());
+  if(missing){
+    document.getElementById('inbox-review-error').style.display='block';
+    document.getElementById('inbox-review-error').textContent='Enter a project name or STOCK for every included item.';
+    return;
+  }
+  document.getElementById('inbox-review-error').style.display='none';
+  document.getElementById('inbox-commit-btn').textContent='Saving…';
+  document.getElementById('inbox-commit-btn').disabled=true;
+
+  const newEntries=included.map(item=>({
+    id:Date.now().toString()+Math.random().toString(36).slice(2,5),
+    location:item._location||'',
+    shape:item.shape,
+    size:item.size,
+    wPerFt:null,
+    qty:item.qty,
+    qtyRemaining:item.qty,
+    lenFt:item.lenFt||null,
+    lenIn:item.lenIn||null,
+    totalWeight:item.weightLbs||null,
+    costPerLb:item.costPerLb||null,
+    totalCost:item.totalCost||null,
+    projectOrStock:item._project.trim().toUpperCase()==='STOCK'?'STOCK':item._project.trim(),
+    docType:item.docType||'Invoice',
+    supplier:item.supplier,
+    invoiceNum:item.invoiceNum,
+    poNum:item.poNum,
+    invoiceDate:item.invoiceDate,
+    grade:item.grade||'',
+    heatNumber:item.heat||'',
+    remarks:[
+      item._project.trim().toUpperCase()!=='STOCK'?'Project: '+item._project.trim():'STOCK',
+      item.grade||'',
+      item.heat?'Heat#: '+item.heat:'',
+      item.supplier,
+      item.invoiceNum?'Inv: '+item.invoiceNum:'',
+      item.poNum?'PO: '+item.poNum:''
+    ].filter(Boolean).join(' · '),
+    added:new Date().toISOString()
+  }));
+
+  newEntries.forEach(e=>inventory.unshift(e));
+  const result=await writeInventoryToSheet();
+  if(!result||!result.success){
+    toast('Write failed — check connection','danger');
+    document.getElementById('inbox-commit-btn').textContent='Confirm & add to inventory';
+    document.getElementById('inbox-commit-btn').disabled=false;
+    return;
+  }
+
+  // Mark inbox rows as imported
+  const rowIndices=included.map(i=>i._rowIdx);
+  const projectMap={};
+  included.forEach(i=>{projectMap[i._rowIdx]=i._project;});
+  await updateInboxStatus(rowIndices,projectMap);
+  await syncAll(false);
+
+  const totalCost=included.reduce((a,i)=>a+(parseFloat(i.totalCost)||0),0);
+  const totalWt=included.reduce((a,i)=>a+(parseFloat(i.weightLbs)||0),0);
+  document.getElementById('import-inbox-review').style.display='none';
+  document.getElementById('import-result-view').style.display='block';
+  document.getElementById('import-result-sub').innerHTML=
+    `<strong>${newEntries.length} items added from Invoice Inbox</strong><br>`+
+    `${totalWt.toLocaleString('en-US',{maximumFractionDigits:0})} lbs · $${totalCost.toLocaleString('en-US',{minimumFractionDigits:2})}`;
+  document.getElementById('inbox-commit-btn').textContent='Confirm & add to inventory';
+  document.getElementById('inbox-commit-btn').disabled=false;
+  toast('Added '+newEntries.length+' items from inbox','success');
+}
+
 function importBackToSelector(){
   importCurrentInv=null;
   importLineItems=[];
   document.getElementById('import-selector-view').style.display='block';
   document.getElementById('import-review-view').style.display='none';
   document.getElementById('import-result-view').style.display='none';
+  document.getElementById('import-inbox-review').style.display='none';
   renderImportSelector();
+  renderInboxSection();
 }
 
 // ── INIT ─────────────────────────────────────────────────────────────
