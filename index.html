@@ -2097,15 +2097,31 @@ async function commitInboxReview(){
 
   const totalCost=assigned.reduce((a,i)=>a+(parseFloat(i.totalCost)||0),0);
   const totalWt=assigned.reduce((a,i)=>a+(parseFloat(i.weightLbs)||0),0);
-  document.getElementById('import-inbox-review').style.display='none';
-  document.getElementById('import-result-view').style.display='block';
-  document.getElementById('import-result-sub').innerHTML=
-    `<strong>${newEntries.length} items added to inventory</strong><br>`+
-    `${totalWt.toLocaleString('en-US',{maximumFractionDigits:0})} lbs · $${totalCost.toLocaleString('en-US',{minimumFractionDigits:2})}<br><br>`+
-    (unassigned.length?`<span style="color:var(--warning)">⚠️ ${unassigned.length} item${unassigned.length>1?'s':''} still pending — come back when projects are identified</span>`:'');
+
+  // Remove only the committed items from inboxItems — keep unassigned ones
+  inboxItems=inboxItems.filter(i=>!assigned.includes(i));
+
   document.getElementById('inbox-commit-btn').textContent='Confirm assigned items & leave rest pending';
   document.getElementById('inbox-commit-btn').disabled=false;
-  toast(`Added ${newEntries.length} items · ${unassigned.length} still pending`,'success');
+
+  if(unassigned.length){
+    // Still items pending — stay on review screen, show success message and refresh list
+    document.getElementById('inbox-review-error').style.display='block';
+    document.getElementById('inbox-review-error').style.background='var(--success-bg)';
+    document.getElementById('inbox-review-error').style.borderColor='var(--success)';
+    document.getElementById('inbox-review-error').style.color='var(--success)';
+    document.getElementById('inbox-review-error').textContent=`✅ ${newEntries.length} items added · ${unassigned.length} still pending below — assign projects when ready`;
+    document.getElementById('inbox-review-count').textContent=inboxItems.length+' items remaining';
+    renderInboxReviewItems();
+  }else{
+    // All done
+    document.getElementById('import-inbox-review').style.display='none';
+    document.getElementById('import-result-view').style.display='block';
+    document.getElementById('import-result-sub').innerHTML=
+      `<strong>All ${newEntries.length} items added to inventory</strong><br>`+
+      `${totalWt.toLocaleString('en-US',{maximumFractionDigits:0})} lbs · $${totalCost.toLocaleString('en-US',{minimumFractionDigits:2})}`;
+  }
+  toast(`Added ${newEntries.length} · ${unassigned.length} still pending`,'success');
 }
 
 function importBackToSelector(){
