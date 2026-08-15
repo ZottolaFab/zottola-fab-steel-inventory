@@ -880,7 +880,7 @@ async function syncAll(manual=false){
     // Read inbox
     const inboxRows=await readTab(TABS.inbox);
     if(inboxRows!==null){
-      inboxItems=inboxRows.filter(r=>r&&r[0]&&(!r[16]||r[16].toString().trim()==='')&&(r[6]||r[4])).map((r,i)=>({
+      inboxItems=inboxRows.filter(r=>r&&r[0]&&(!r[16]||r[16].toString().trim().toLowerCase()!=='imported')&&(r[6]||r[4])).map((r,i)=>({
         _rowIdx:i+2, // +2 for header + 1-based
         supplier:r[0]||'',invoiceNum:r[1]||'',poNum:r[2]||'',invoiceDate:r[3]||'',
         docType:r[4]||'Invoice',shape:r[5]||'',size:r[6]||'',qty:parseInt(r[7])||1,
