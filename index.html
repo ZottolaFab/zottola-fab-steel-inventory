@@ -510,9 +510,9 @@ h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,
     </div>
     <div style="background:var(--danger-bg);border:1px solid var(--danger);border-radius:var(--radius);padding:10px 12px;font-size:13px;color:var(--danger);display:none" id="inbox-review-error"></div>
     <button class="btn btn-primary btn-full" onclick="commitInboxReview()" id="inbox-commit-btn">
-      <i class="ti ti-database-import"></i> Confirm &amp; add to inventory
+      <i class="ti ti-database-import"></i> Confirm assigned items &amp; leave rest pending
     </button>
-    <p style="font-size:11px;color:var(--text3);text-align:center;padding-bottom:20px">Assign project or STOCK to every line · Toggle off to exclude</p>
+    <p style="font-size:11px;color:var(--text3);text-align:center;padding-bottom:20px">Only items with a project assigned will be added · Unassigned items stay in the inbox</p>
   </div>
 
 <div id="import-result-view" style="display:none;padding:14px">
@@ -998,6 +998,7 @@ async function loadProjects(manual=false){
       projects=names;saveCache();
       if(manual)toast(`${names.length} projects loaded`,'success');
       buildAddProjDD();
+      buildConsProjDD();
       if(importCurrentInv!==null)renderImportLineItems();
     }else{
       if(manual)toast('No projects found — check TT Log sheet','danger');
@@ -1634,6 +1635,7 @@ function onAddProjSel(val){
 }
 function buildAddProjDD(){
   const sel=document.getElementById('f-project-sel');
+  if(!sel)return;
   const cur=sel.value;
   sel.innerHTML='<option value="">— select project or stock —</option><option value="STOCK">📦 STOCK</option>';
   projects.forEach(p=>{const o=document.createElement('option');o.value=p;o.textContent=p;if(p===cur)o.selected=true;sel.appendChild(o);});
@@ -2031,17 +2033,21 @@ function updateInboxSummary(){
 async function commitInboxReview(){
   const included=inboxItems.filter(i=>i._included);
   if(!included.length){toast('No items included','danger');return;}
-  const missing=included.find(i=>!i._project.trim());
-  if(missing){
+
+  // Split into assigned (has project) and unassigned
+  const assigned=included.filter(i=>i._project.trim());
+  const unassigned=included.filter(i=>!i._project.trim());
+
+  if(!assigned.length){
     document.getElementById('inbox-review-error').style.display='block';
-    document.getElementById('inbox-review-error').textContent='Enter a project name or STOCK for every included item.';
+    document.getElementById('inbox-review-error').textContent='No items have a project assigned yet. Assign at least one project to confirm.';
     return;
   }
   document.getElementById('inbox-review-error').style.display='none';
   document.getElementById('inbox-commit-btn').textContent='Saving…';
   document.getElementById('inbox-commit-btn').disabled=true;
 
-  const newEntries=included.map(item=>({
+  const newEntries=assigned.map(item=>({
     id:Date.now().toString()+Math.random().toString(36).slice(2,5),
     location:item._location||'',
     shape:item.shape,
@@ -2077,28 +2083,29 @@ async function commitInboxReview(){
   const result=await writeInventoryToSheet();
   if(!result||!result.success){
     toast('Write failed — check connection','danger');
-    document.getElementById('inbox-commit-btn').textContent='Confirm & add to inventory';
+    document.getElementById('inbox-commit-btn').textContent='Confirm assigned items & leave rest pending';
     document.getElementById('inbox-commit-btn').disabled=false;
     return;
   }
 
-  // Mark inbox rows as imported
-  const rowIndices=included.map(i=>i._rowIdx);
+  // Mark only assigned rows as Imported — unassigned stay blank (pending)
+  const assignedIndices=assigned.map(i=>i._rowIdx);
   const projectMap={};
-  included.forEach(i=>{projectMap[i._rowIdx]=i._project;});
-  await updateInboxStatus(rowIndices,projectMap);
+  assigned.forEach(i=>{projectMap[i._rowIdx]=i._project;});
+  await updateInboxStatus(assignedIndices,projectMap);
   await syncAll(false);
 
-  const totalCost=included.reduce((a,i)=>a+(parseFloat(i.totalCost)||0),0);
-  const totalWt=included.reduce((a,i)=>a+(parseFloat(i.weightLbs)||0),0);
+  const totalCost=assigned.reduce((a,i)=>a+(parseFloat(i.totalCost)||0),0);
+  const totalWt=assigned.reduce((a,i)=>a+(parseFloat(i.weightLbs)||0),0);
   document.getElementById('import-inbox-review').style.display='none';
   document.getElementById('import-result-view').style.display='block';
   document.getElementById('import-result-sub').innerHTML=
-    `<strong>${newEntries.length} items added from Invoice Inbox</strong><br>`+
-    `${totalWt.toLocaleString('en-US',{maximumFractionDigits:0})} lbs · $${totalCost.toLocaleString('en-US',{minimumFractionDigits:2})}`;
-  document.getElementById('inbox-commit-btn').textContent='Confirm & add to inventory';
+    `<strong>${newEntries.length} items added to inventory</strong><br>`+
+    `${totalWt.toLocaleString('en-US',{maximumFractionDigits:0})} lbs · $${totalCost.toLocaleString('en-US',{minimumFractionDigits:2})}<br><br>`+
+    (unassigned.length?`<span style="color:var(--warning)">⚠️ ${unassigned.length} item${unassigned.length>1?'s':''} still pending — come back when projects are identified</span>`:'');
+  document.getElementById('inbox-commit-btn').textContent='Confirm assigned items & leave rest pending';
   document.getElementById('inbox-commit-btn').disabled=false;
-  toast('Added '+newEntries.length+' items from inbox','success');
+  toast(`Added ${newEntries.length} items · ${unassigned.length} still pending`,'success');
 }
 
 function importBackToSelector(){
