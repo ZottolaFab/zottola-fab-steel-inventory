@@ -505,24 +505,8 @@ h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,
     <div style="background:var(--accent-bg);border:1px solid var(--accent-dim);border-radius:var(--radius);padding:10px 12px;font-size:12px;color:var(--accent)">
       <i class="ti ti-info-circle"></i> These items were entered via Invoice Inbox. Assign a project to each line then confirm.
     </div>
-    <div class="card">
-      <div class="card-hd"><span class="card-label">Fuel surcharge — splits by weight across all lines</span></div>
-      <div class="card-body">
-        <div class="field-row">
-          <div class="field" style="margin-bottom:0">
-            <label>Total fuel surcharge ($) for this invoice</label>
-            <input type="number" id="inbox-fuel-surcharge" placeholder="e.g. 17.75" step="0.01"
-              oninput="splitInboxFuelSurcharge()"
-              style="padding:8px 10px;font-size:14px;border:1px solid var(--border2);border-radius:var(--radius);background:var(--surface2);color:var(--text);font-family:var(--font);width:100%">
-          </div>
-          <div class="field" style="margin-bottom:0;display:flex;align-items:flex-end">
-            <button class="btn btn-sm" onclick="splitInboxFuelSurcharge()" style="width:100%">
-              <i class="ti ti-calculator"></i> Split by weight
-            </button>
-          </div>
-        </div>
-        <div style="font-size:11px;color:var(--text3);margin-top:6px">Surcharge splits proportionally by weight. You can also enter per-line amounts manually below.</div>
-      </div>
+    <div style="background:var(--success-bg);border:1px solid var(--success-dim);border-radius:var(--radius);padding:10px 12px;font-size:12px;color:var(--success)">
+      <i class="ti ti-check"></i> Fuel surcharge has been pre-calculated and applied to each line item from the invoice. Review and adjust below if needed.
     </div>
     <div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:0.06em;display:flex;justify-content:space-between;align-items:center">
       Inbox items <span style="background:var(--accent-bg);color:var(--accent);border-radius:20px;padding:2px 8px;font-size:11px" id="inbox-review-count"></span>
@@ -852,7 +836,7 @@ function sheetsUpdate(tab,range,values){
 
 // Row formats
 const CONSUMABLES_HEADER=['Date','Supplier','Invoice #','Part #','Description','Machine','Qty','Unit Price','Total Cost','Project','Remarks','Entered By'];
-const INBOX_HEADER=['Supplier','Invoice #','PO #','Invoice Date','Doc Type','Shape','Size','Qty','Length Ft','Length In','Weight Lbs','Cost Per Lb','Total Cost','Grade','Heat #','Remarks','Status','Project'];
+const INBOX_HEADER=['Supplier','Invoice #','PO #','Invoice Date','Doc Type','Shape','Size','Qty','Length Ft','Length In','Weight Lbs','Cost Per Lb','Total Cost','Grade','Heat #','Remarks','Status','Project','Fuel Surcharge'];
 const INV_HEADER=['ID','Location','Shape','Size','Wt/ft','Qty','Qty Remaining','Len Ft','Len In','Total Wt (lbs)','Cost/lb','Total Cost','Fuel Surcharge','Adjusted Cost/lb','Project/Stock','Doc Type','Status','Supplier','Invoice #','PO #','Invoice Date','Grade','Heat #','Remarks','Added','Edited'];
 const LOG_HEADER=['ID','Date','Time','Job','Shape','Size','Location','Qty Used','Qty Remaining','Length','Remarks'];
 const LOC_HEADER=['ID','Name','Description'];
@@ -923,6 +907,7 @@ async function syncAll(manual=false){
         weightLbs:parseFloat(r[10])||null,costPerLb:parseFloat(r[11])||null,
         totalCost:parseFloat(r[12])||null,grade:r[13]||'',heat:r[14]||'',remarks:r[15]||'',
         status:r[16]||'',project:r[17]||'',
+        _fuelSurcharge:parseFloat(r[18])||0,
         _included:true,_project:r[17]||'',_location:''
       }));
     }
@@ -993,7 +978,7 @@ async function updateInboxStatus(rowIndices, projectMap){
   rowIndices.forEach(idx=>{
     const rowIdx = idx - 2;
     if(rowIdx >= 0 && rowIdx < inboxRows.length){
-      while(inboxRows[rowIdx].length < 18) inboxRows[rowIdx].push('');
+      while(inboxRows[rowIdx].length < 19) inboxRows[rowIdx].push('');
       inboxRows[rowIdx][16] = 'Imported';
       inboxRows[rowIdx][17] = projectMap[idx] || inboxRows[rowIdx][17] || '';
     }
@@ -1004,7 +989,7 @@ async function updateInboxStatus(rowIndices, projectMap){
   inboxRows.forEach(r=>{
     const row = r.slice();
     while(row.length < 18) row.push('');
-    allRows.push(row.slice(0,18));
+    allRows.push(row.slice(0,19));
   });
   await scriptWrite('writeSheet', {tab: TABS.inbox, rows: allRows});
 }
@@ -2081,7 +2066,7 @@ function renderInboxReviewItems(){
           <div style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:3px">Fuel surcharge ($)</div>
           <input type="number" id="inbx-fuel-${i}" placeholder="0.00" step="0.01"
             style="width:100%;padding:8px 10px;font-size:13px;border:1px solid var(--border2);border-radius:var(--radius);background:var(--surface2);color:var(--text);font-family:var(--font)"
-            oninput="inboxItems[${i}]._fuelSurcharge=parseFloat(this.value)||0;updateInboxAdjCost(${i})" value="${item._fuelSurcharge||''}">
+            oninput="inboxItems[${i}]._fuelSurcharge=parseFloat(this.value)||0;updateInboxAdjCost(${i})" value="${(item._fuelSurcharge||0).toFixed(2)}">
         </div>
         <div>
           <div style="font-size:10px;font-weight:600;color:var(--accent);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:3px">Adjusted cost/lb</div>
@@ -2200,7 +2185,7 @@ async function commitInboxReview(){
     totalWeight:item.weightLbs||null,
     costPerLb:item.costPerLb||null,
     totalCost:item.totalCost||null,
-    fuelSurcharge:item._fuelSurcharge||null,
+    fuelSurcharge:item._fuelSurcharge||0,
     projectOrStock:item._project.trim().toUpperCase()==='STOCK'?'STOCK':item._project.trim(),
     docType:item.docType||'Invoice',
     supplier:item.supplier,
