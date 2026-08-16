@@ -368,11 +368,22 @@ h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,
       <div class="field-row">
         <div class="field" style="margin-bottom:0">
           <label>Cost per lb ($)</label>
-          <input type="number" id="f-cost-lb" placeholder="e.g. 0.8290" step="0.0001">
+          <input type="number" id="f-cost-lb" placeholder="e.g. 0.8290" step="0.0001" oninput="calcAdjCostLbField()">
         </div>
         <div class="field" style="margin-bottom:0">
           <label>Total cost ($)</label>
-          <input type="number" id="f-total-cost" placeholder="e.g. 846.41" step="0.01">
+          <input type="number" id="f-total-cost" placeholder="e.g. 846.41" step="0.01" oninput="calcAdjCostLbField()">
+        </div>
+      </div>
+      <div class="field-row" style="margin-top:10px">
+        <div class="field" style="margin-bottom:0">
+          <label>Fuel surcharge ($)</label>
+          <input type="number" id="f-fuel-surcharge" placeholder="e.g. 15.60" step="0.01" oninput="calcAdjCostLbField()">
+        </div>
+        <div class="field" style="margin-bottom:0">
+          <label>Adjusted cost/lb ($)</label>
+          <input type="number" id="f-adj-cost-lb" placeholder="auto-calculates" step="0.0001" readonly
+            style="background:var(--surface3);color:var(--accent);font-weight:500">
         </div>
       </div>
 
@@ -493,6 +504,25 @@ h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,
     <button class="btn btn-sm" onclick="importBackToSelector()" style="align-self:flex-start"><i class="ti ti-arrow-left"></i> Back</button>
     <div style="background:var(--accent-bg);border:1px solid var(--accent-dim);border-radius:var(--radius);padding:10px 12px;font-size:12px;color:var(--accent)">
       <i class="ti ti-info-circle"></i> These items were entered via Invoice Inbox. Assign a project to each line then confirm.
+    </div>
+    <div class="card">
+      <div class="card-hd"><span class="card-label">Fuel surcharge — splits by weight across all lines</span></div>
+      <div class="card-body">
+        <div class="field-row">
+          <div class="field" style="margin-bottom:0">
+            <label>Total fuel surcharge ($) for this invoice</label>
+            <input type="number" id="inbox-fuel-surcharge" placeholder="e.g. 17.75" step="0.01"
+              oninput="splitInboxFuelSurcharge()"
+              style="padding:8px 10px;font-size:14px;border:1px solid var(--border2);border-radius:var(--radius);background:var(--surface2);color:var(--text);font-family:var(--font);width:100%">
+          </div>
+          <div class="field" style="margin-bottom:0;display:flex;align-items:flex-end">
+            <button class="btn btn-sm" onclick="splitInboxFuelSurcharge()" style="width:100%">
+              <i class="ti ti-calculator"></i> Split by weight
+            </button>
+          </div>
+        </div>
+        <div style="font-size:11px;color:var(--text3);margin-top:6px">Surcharge splits proportionally by weight. You can also enter per-line amounts manually below.</div>
+      </div>
     </div>
     <div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:0.06em;display:flex;justify-content:space-between;align-items:center">
       Inbox items <span style="background:var(--accent-bg);color:var(--accent);border-radius:20px;padding:2px 8px;font-size:11px" id="inbox-review-count"></span>
@@ -823,13 +853,18 @@ function sheetsUpdate(tab,range,values){
 // Row formats
 const CONSUMABLES_HEADER=['Date','Supplier','Invoice #','Part #','Description','Machine','Qty','Unit Price','Total Cost','Project','Remarks','Entered By'];
 const INBOX_HEADER=['Supplier','Invoice #','PO #','Invoice Date','Doc Type','Shape','Size','Qty','Length Ft','Length In','Weight Lbs','Cost Per Lb','Total Cost','Grade','Heat #','Remarks','Status','Project'];
-const INV_HEADER=['ID','Location','Shape','Size','Wt/ft','Qty','Qty Remaining','Len Ft','Len In','Total Wt (lbs)','Cost/lb','Total Cost','Project/Stock','Doc Type','Status','Supplier','Invoice #','PO #','Invoice Date','Grade','Heat #','Remarks','Added','Edited'];
+const INV_HEADER=['ID','Location','Shape','Size','Wt/ft','Qty','Qty Remaining','Len Ft','Len In','Total Wt (lbs)','Cost/lb','Total Cost','Fuel Surcharge','Adjusted Cost/lb','Project/Stock','Doc Type','Status','Supplier','Invoice #','PO #','Invoice Date','Grade','Heat #','Remarks','Added','Edited'];
 const LOG_HEADER=['ID','Date','Time','Job','Shape','Size','Location','Qty Used','Qty Remaining','Length','Remarks'];
 const LOC_HEADER=['ID','Name','Description'];
 const TYPE_HEADER=['ID','Name','Wt/ft','Category'];
 
-function invToRow(i){return[i.id,i.location,i.shape,i.size,i.wPerFt||'',i.qty,i.qtyRemaining,i.lenFt||'',i.lenIn||'',i.totalWeight||'',i.costPerLb||'',i.totalCost||'',i.projectOrStock||'',i.docType||'',i.docType==='PO'?'On Order':'Received',i.supplier||'',i.invoiceNum||'',i.poNum||'',i.invoiceDate||'',i.grade||'',i.heatNumber||'',i.remarks||'',i.added,i.edited||''];}
-function rowToInv(r){return{id:r[0],location:r[1],shape:r[2],size:r[3],wPerFt:r[4]?parseFloat(r[4]):null,qty:parseInt(r[5])||0,qtyRemaining:parseInt(r[6])||0,lenFt:r[7]?parseFloat(r[7]):null,lenIn:r[8]?parseFloat(r[8]):null,totalWeight:r[9]?parseFloat(r[9]):null,costPerLb:r[10]||null,totalCost:r[11]?parseFloat(r[11]):null,projectOrStock:r[12]||'',docType:r[13]||'',status:r[14]||'',supplier:r[15]||'',invoiceNum:r[16]||'',poNum:r[17]||'',invoiceDate:r[18]||'',grade:r[19]||'',heatNumber:r[20]||'',remarks:r[21]||'',added:r[22]||new Date().toISOString(),edited:r[23]||''};}
+function calcAdjCostPerLb(i){
+  if(!i.totalWeight||!i.totalCost) return '';
+  const total=(parseFloat(i.totalCost)||0)+(parseFloat(i.fuelSurcharge)||0);
+  return total&&i.totalWeight?(total/i.totalWeight).toFixed(4):'';
+}
+function invToRow(i){return[i.id,i.location,i.shape,i.size,i.wPerFt||'',i.qty,i.qtyRemaining,i.lenFt||'',i.lenIn||'',i.totalWeight||'',i.costPerLb||'',i.totalCost||'',i.fuelSurcharge||'',calcAdjCostPerLb(i),i.projectOrStock||'',i.docType||'',i.docType==='PO'?'On Order':'Received',i.supplier||'',i.invoiceNum||'',i.poNum||'',i.invoiceDate||'',i.grade||'',i.heatNumber||'',i.remarks||'',i.added,i.edited||''];}
+function rowToInv(r){return{id:r[0],location:r[1],shape:r[2],size:r[3],wPerFt:r[4]?parseFloat(r[4]):null,qty:parseInt(r[5])||0,qtyRemaining:parseInt(r[6])||0,lenFt:r[7]?parseFloat(r[7]):null,lenIn:r[8]?parseFloat(r[8]):null,totalWeight:r[9]?parseFloat(r[9]):null,costPerLb:r[10]||null,totalCost:r[11]?parseFloat(r[11]):null,fuelSurcharge:r[12]?parseFloat(r[12]):null,adjCostPerLb:r[13]||null,projectOrStock:r[14]||'',docType:r[15]||'',status:r[16]||'',supplier:r[17]||'',invoiceNum:r[18]||'',poNum:r[19]||'',invoiceDate:r[20]||'',grade:r[21]||'',heatNumber:r[22]||'',remarks:r[23]||'',added:r[24]||new Date().toISOString(),edited:r[25]||''};}
 function logToRow(e){const d=new Date(e.time);return[e.id,d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}),d.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'}),e.job||'',e.shape,e.size||'',e.location,e.qtyUsed,e.qtyRemaining,fmtLen(e.lenFt,e.lenIn),e.remarks||''];}
 function locToRow(l){return[l.id,l.name,l.desc||''];}
 function typeToRow(t){return[t.id,t.name,t.wft||'',t.category||''];}
@@ -1126,6 +1161,7 @@ async function saveItem(){
   const poNum=document.getElementById('f-po-num').value.trim();
   const grade=document.getElementById('f-grade').value.trim();
   const heatNumber=document.getElementById('f-heat').value.trim();
+  const fuelSurcharge=parseFloat(document.getElementById('f-fuel-surcharge').value)||null;
   if(!loc){openValidationModal('Site location required','Please select or type a site location before saving.');return;}
   if(!size){openValidationModal('Shape / size required','Please select or enter a shape and size before saving.');return;}
   if(qty<1){openValidationModal('Number of pieces required','Please enter the number of pieces before saving.');return;}
@@ -1136,7 +1172,7 @@ async function saveItem(){
     if(item){Object.assign(item,{location:loc,shape:shape!=='custom'?shape:size,size,wPerFt:wft,qty,lenFt:ft||null,lenIn:inches||null,totalWeight:wTotal||null,costPerLb,totalCost,projectOrStock,docType,supplier,invoiceNum,poNum,grade,heatNumber,remarks,edited:new Date().toISOString()});}
     cancelEdit();toast('Entry updated','success');
   }else{
-    const newItem={id:Date.now().toString(),location:loc,shape:shape!=='custom'?shape:size,size,wPerFt:wft,qty,qtyRemaining:qty,lenFt:ft||null,lenIn:inches||null,totalWeight:wTotal||null,costPerLb,totalCost,projectOrStock,docType,supplier,invoiceNum,poNum,grade,heatNumber,remarks,added:new Date().toISOString()};
+    const newItem={id:Date.now().toString(),location:loc,shape:shape!=='custom'?shape:size,size,wPerFt:wft,qty,qtyRemaining:qty,lenFt:ft||null,lenIn:inches||null,totalWeight:wTotal||null,costPerLb,totalCost,fuelSurcharge,projectOrStock,docType,supplier,invoiceNum,poNum,grade,heatNumber,remarks,added:new Date().toISOString()};
     // Check for duplicates
     const dupes=findDuplicates([newItem]);
     if(dupes.length){
@@ -1178,6 +1214,8 @@ function editItem(id){
   document.getElementById('f-po-num').value=item.poNum||'';
   document.getElementById('f-grade').value=item.grade||'';
   document.getElementById('f-heat').value=item.heatNumber||'';
+  document.getElementById('f-fuel-surcharge').value=item.fuelSurcharge||'';
+  calcAdjCostLbField();
   setAddDocType(item.docType||'Invoice');
   buildAddProjDD();
   if(item.projectOrStock){
@@ -1193,7 +1231,7 @@ function editItem(id){
 }
 function cancelEdit(){document.getElementById('f-edit-id').value='';document.getElementById('add-card-label').textContent='New material entry';document.getElementById('save-btn-label').textContent='Add to inventory';document.getElementById('cancel-edit-btn').style.display='none';clearAddForm();}
 function clearAddForm(){
-  ['f-location','f-size','f-qty','f-weight-total','f-len-ft','f-len-in','f-remarks','f-cost-lb','f-total-cost','f-supplier','f-invoice-num','f-po-num','f-grade','f-heat','f-project-new'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+  ['f-location','f-size','f-qty','f-weight-total','f-len-ft','f-len-in','f-remarks','f-cost-lb','f-total-cost','f-fuel-surcharge','f-adj-cost-lb','f-supplier','f-invoice-num','f-po-num','f-grade','f-heat','f-project-new'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
   document.getElementById('f-shape').value='';
   document.getElementById('f-location-sel').value='';
   document.getElementById('shape-search').value='';
@@ -2039,6 +2077,18 @@ function renderInboxReviewItems(){
           <input type="text" placeholder="e.g. Bay 3, Rack A" style="width:100%;padding:8px 10px;font-size:13px;border:1px solid var(--border2);border-radius:var(--radius);background:var(--surface2);color:var(--text);font-family:var(--font)"
             oninput="inboxItems[${i}]._location=this.value" value="${item._location||''}">
         </div>
+        <div>
+          <div style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:3px">Fuel surcharge ($)</div>
+          <input type="number" id="inbx-fuel-${i}" placeholder="0.00" step="0.01"
+            style="width:100%;padding:8px 10px;font-size:13px;border:1px solid var(--border2);border-radius:var(--radius);background:var(--surface2);color:var(--text);font-family:var(--font)"
+            oninput="inboxItems[${i}]._fuelSurcharge=parseFloat(this.value)||0;updateInboxAdjCost(${i})" value="${item._fuelSurcharge||''}">
+        </div>
+        <div>
+          <div style="font-size:10px;font-weight:600;color:var(--accent);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:3px">Adjusted cost/lb</div>
+          <div id="inbx-adj-${i}" style="font-size:14px;font-weight:600;color:var(--accent);padding:8px 0">
+            ${item.weightLbs&&item.totalCost?'$'+(((parseFloat(item.totalCost)||0)+(parseFloat(item._fuelSurcharge)||0))/item.weightLbs).toFixed(4):'—'}
+          </div>
+        </div>
         <div style="grid-column:1/-1">
           <div style="font-size:10px;font-weight:600;color:var(--accent);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:5px">Project / Stock <span style="color:var(--accent)">*</span></div>
           <select id="inbx-proj-${i}" onchange="onInboxProjSel(${i},this.value)"
@@ -2059,6 +2109,41 @@ function renderInboxReviewItems(){
     list.appendChild(div);
   });
   updateInboxSummary();
+}
+
+function splitInboxFuelSurcharge(){
+  const total=parseFloat(document.getElementById('inbox-fuel-surcharge').value)||0;
+  if(!total){toast('Enter a fuel surcharge amount first','danger');return;}
+  const included=inboxItems.filter(i=>i._included);
+  const totalWt=included.reduce((a,i)=>a+(parseFloat(i.weightLbs)||0),0);
+  if(!totalWt){toast('No weight data to split by','danger');return;}
+  included.forEach((item,idx)=>{
+    const share=totalWt>0?total*(parseFloat(item.weightLbs)||0)/totalWt:0;
+    item._fuelSurcharge=parseFloat(share.toFixed(2));
+    const el=document.getElementById('inbx-fuel-'+item._id);
+    if(el) el.value=item._fuelSurcharge;
+    updateInboxAdjCost(item._id);
+  });
+  toast(`$${total.toFixed(2)} split across ${included.length} items`,'success');
+}
+
+function updateInboxAdjCost(i){
+  const item=inboxItems[i];
+  if(!item) return;
+  const adj=item.weightLbs&&item.totalCost
+    ?((parseFloat(item.totalCost)||0)+(parseFloat(item._fuelSurcharge)||0))/item.weightLbs
+    :null;
+  const el=document.getElementById('inbx-adj-'+i);
+  if(el) el.textContent=adj?'$'+adj.toFixed(4):'—';
+}
+
+function calcAdjCostLbField(){
+  const wt=parseFloat(document.getElementById('f-weight-total').value)||0;
+  const cost=parseFloat(document.getElementById('f-total-cost').value)||0;
+  const fuel=parseFloat(document.getElementById('f-fuel-surcharge').value)||0;
+  const adj=wt?(cost+fuel)/wt:null;
+  const el=document.getElementById('f-adj-cost-lb');
+  if(el) el.value=adj?adj.toFixed(4):'';
 }
 
 function toggleInboxItem(i){
@@ -2115,6 +2200,7 @@ async function commitInboxReview(){
     totalWeight:item.weightLbs||null,
     costPerLb:item.costPerLb||null,
     totalCost:item.totalCost||null,
+    fuelSurcharge:item._fuelSurcharge||null,
     projectOrStock:item._project.trim().toUpperCase()==='STOCK'?'STOCK':item._project.trim(),
     docType:item.docType||'Invoice',
     supplier:item.supplier,
