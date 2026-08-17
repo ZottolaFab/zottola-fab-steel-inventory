@@ -970,28 +970,19 @@ async function markInboxRowsImported(rowIndices, projectMap){
 
 // Simpler approach — rewrite entire inbox with status updated
 async function updateInboxStatus(rowIndices, projectMap){
-  // Re-read the full inbox from sheet to get current state
-  const inboxRows = await readTab(TABS.inbox);
-  if(!inboxRows || !inboxRows.length) return;
-
-  // Mark ONLY the committed rows — every other row untouched
-  rowIndices.forEach(idx=>{
-    const rowIdx = idx - 2;
-    if(rowIdx >= 0 && rowIdx < inboxRows.length){
-      while(inboxRows[rowIdx].length < 19) inboxRows[rowIdx].push('');
-      inboxRows[rowIdx][16] = 'Imported';
-      inboxRows[rowIdx][17] = projectMap[idx] || inboxRows[rowIdx][17] || '';
-    }
-  });
-
-  // Write back ALL rows — committed get Imported, others preserved exactly
-  const allRows = [INBOX_HEADER];
-  inboxRows.forEach(r=>{
-    const row = r.slice();
-    while(row.length < 18) row.push('');
-    allRows.push(row.slice(0,19));
-  });
-  await scriptWrite('writeSheet', {tab: TABS.inbox, rows: allRows});
+  // Update ONLY the Status and Project cells for committed rows
+  // Uses updateCells action to avoid rewriting the entire sheet
+  for(const idx of rowIndices){
+    const project = projectMap[idx] || '';
+    await scriptWrite('updateCells', {
+      tab: TABS.inbox,
+      row: idx, // 1-based row index including header
+      updates: {
+        17: 'Imported',  // col Q = Status
+        18: project       // col R = Project
+      }
+    });
+  }
 }
 
 // ── DUPLICATE CHECK ──────────────────────────────────────────────────
