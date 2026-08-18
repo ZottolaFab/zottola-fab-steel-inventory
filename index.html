@@ -961,9 +961,13 @@ async function scriptWrite(action, data){
     });
     const text = await r.text();
     console.log('scriptWrite response:', action, text.slice(0,200));
-    // Handle both {success:true} and {status:'ok'} response formats
     const result = JSON.parse(text);
-    if(result.status==='ok'||result.success===true) return {success:true};
+    // {status:'ok'} means we hit doGet instead of doPost — that's a failure
+    if(result.status==='ok'&&!result.success){
+      console.error('scriptWrite hit doGet instead of doPost — POST redirect issue');
+      return {success:false, error:'POST redirected to GET'};
+    }
+    if(result.success===true||result.count>=0) return {success:true};
     console.error('scriptWrite failed:', action, result);
     return result;
   }catch(e){
@@ -2292,7 +2296,7 @@ async function commitInboxReview(){
   assigned.forEach(i=>{projectMap[i._rowIdx]=i._project;});
   await updateInboxStatus(assignedIndices,projectMap);
 
-  // Only do full sync if all items are done — otherwise just write inventory
+  // Only do full sync if all items are done
   if(unassigned.length===0) await syncAll(false);
 
   const totalCost=assigned.reduce((a,i)=>a+(parseFloat(i.totalCost)||0),0);
