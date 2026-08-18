@@ -255,6 +255,7 @@ h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,
     document.getElementById('local-file-warning').style.display='block';
   }
 </script>
+<div class="topbar">
   <div class="topbar-brand">
     <div class="topbar-logo">ZF</div>
     <span class="topbar-name">Zottola Fab <span>·</span> Steel Inventory</span>
@@ -954,12 +955,15 @@ async function scriptWrite(action, data){
     const r = await fetch(url, {
       method: 'POST',
       headers: {'Content-Type': 'text/plain'},
-      body: JSON.stringify(data)
+      body: JSON.stringify(data),
+      redirect: 'follow'
     });
     const text = await r.text();
     console.log('scriptWrite response:', action, text.slice(0,200));
+    // Handle both {success:true} and {status:'ok'} response formats
     const result = JSON.parse(text);
-    if(!result.success) console.error('scriptWrite failed:', action, result);
+    if(result.status==='ok'||result.success===true) return {success:true};
+    console.error('scriptWrite failed:', action, result);
     return result;
   }catch(e){
     console.error('scriptWrite error:', action, e.message);
@@ -986,18 +990,20 @@ async function markInboxRowsImported(rowIndices, projectMap){
 
 // Simpler approach — rewrite entire inbox with status updated
 async function updateInboxStatus(rowIndices, projectMap){
-  // Single call to update all committed rows at once
+  console.log('updateInboxStatus called — rowIndices:', rowIndices, 'projectMap:', projectMap);
   const updates = rowIndices.map(idx=>({
     row: idx,
     col17: 'Imported',
     col18: projectMap[idx] || ''
   }));
+  console.log('Sending updateCells:', updates);
   const result = await scriptWrite('updateCells', {
     tab: TABS.inbox,
     multiRow: true,
     updates: updates
   });
-  if(!result||!result.success) toast('Warning — inbox status may not have saved','danger');
+  console.log('updateCells result:', result);
+  if(!result||!result.success) toast('Warning — inbox status may not have saved','danger',8000);
 }
 
 // ── DUPLICATE CHECK ──────────────────────────────────────────────────
