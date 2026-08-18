@@ -865,18 +865,9 @@ function typeToRow(t){return[t.id,t.name,t.wft||'',t.category||''];}
 // ── READ FROM SHEET ──────────────────────────────────────────────────
 async function readTab(tab){
   try{
-    // Use GViz public feed — works with public sheet sharing, no API key needed
-    const url=`https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent(tab)}&_=${Date.now()}`;
-    const r=await fetch(url,{cache:'no-store'});
-    if(!r.ok) return null;
-    const txt=await r.text();
-    if(!txt.includes('table')) return null;
-    const json=JSON.parse(txt.replace(/^[^(]+\(|\);?$/g,''));
-    if(!json.table||!json.table.rows) return null;
-    const rows=json.table.rows.map(row=>
-      (json.table.cols||[]).map((c,i)=>row.c&&row.c[i]&&row.c[i].v!=null?String(row.c[i].v):'')
-    );
-    return rows.filter(r=>r&&r[0]&&r[0]!=='');
+    const result = await scriptWrite('readSheet', {tab: tab});
+    if(result && result.rows) return result.rows.filter(r=>r&&r[0]!==''&&r[0]!==null&&r[0]!==undefined);
+    return null;
   }catch(e){
     console.error('readTab error:', tab, e.message);
     return null;
