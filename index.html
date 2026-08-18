@@ -2246,16 +2246,17 @@ async function commitInboxReview(){
     added:new Date().toISOString()
   }));
 
-  // Check for duplicates before adding
+  // Check for duplicates — warn but don't block
   const dupes=findDuplicates(newEntries);
   if(dupes.length){
     const names=dupes.map(d=>`${d.entry.size} (${d.entry.invoiceNum})`).join(', ');
-    const proceed=confirm(`⚠️ Possible duplicates found:\n\n${names}\n\nThese items may already be in inventory. Add anyway?`);
-    if(!proceed){
-      document.getElementById('inbox-commit-btn').textContent='Confirm assigned items & leave rest pending';
-      document.getElementById('inbox-commit-btn').disabled=false;
-      return;
-    }
+    console.warn('Duplicates found but proceeding:', names);
+    const err=document.getElementById('inbox-review-error');
+    err.style.display='block';
+    err.style.background='var(--warning-bg)';
+    err.style.borderColor='var(--warning)';
+    err.style.color='var(--warning)';
+    err.textContent=`⚠️ Duplicate warning: ${names} — adding anyway`;
   }
 
   newEntries.forEach(e=>inventory.unshift(e));
