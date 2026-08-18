@@ -865,11 +865,45 @@ function typeToRow(t){return[t.id,t.name,t.wft||'',t.category||''];}
 // ── READ FROM SHEET ──────────────────────────────────────────────────
 async function readTab(tab){
   try{
-    const result = await scriptWrite('readSheet', {tab: tab});
+    // Send tab in URL so it survives Google's redirect, action in body
+    const url = APPS_SCRIPT_URL + '?action=readSheet&tab=' + encodeURIComponent(tab);
+    const r = await fetch(url, {
+      method: 'POST',
+      headers: {'Content-Type': 'text/plain'},
+      body: JSON.stringify({tab: tab}),
+      redirect: 'follow'
+    });
+    const text = await r.text();
+    console.log('readTab', tab, text.slice(0,150));
+    const result = JSON.parse(text);
     if(result && result.rows) return result.rows.filter(r=>r&&r[0]!==''&&r[0]!==null&&r[0]!==undefined);
+    // If {status:'ok'} returned, try reading from GViz as fallback
+    if(result && result.status==='ok'){
+      console.warn('readTab got doGet response, trying GViz fallback for', tab);
+      return await readTabGViz(tab);
+    }
     return null;
   }catch(e){
     console.error('readTab error:', tab, e.message);
+    return await readTabGViz(tab);
+  }
+}
+
+async function readTabGViz(tab){
+  try{
+    const url=`https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent(tab)}&_=${Date.now()}`;
+    const r=await fetch(url,{cache:'no-store'});
+    if(!r.ok) return null;
+    const txt=await r.text();
+    if(!txt.includes('table')) return null;
+    const json=JSON.parse(txt.replace(/^[^(]+\(|\);?$/g,''));
+    if(!json.table||!json.table.rows) return [];
+    const rows=json.table.rows.map(row=>
+      (json.table.cols||[]).map((c,i)=>row.c&&row.c[i]&&row.c[i].v!=null?String(row.c[i].v):'')
+    );
+    return rows.filter(r=>r&&r[0]&&r[0]!=='');
+  }catch(e){
+    console.error('readTabGViz error:', tab, e.message);
     return null;
   }
 }
@@ -2348,15 +2382,9 @@ loadCache();
 buildShapeDD();
 buildAddProjDD();
 document.getElementById('topbar-date') && (document.getElementById('topbar-date').textContent=new Date().toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'}));
-if(cfg.apiKey){
-  document.getElementById('cfg-api-key').value=cfg.apiKey;
-  startAutoSync();
-}else{
-  setSyncUI('err','API key needed');
-  document.getElementById('sheets-status').className='status-pill s-warn';
-  document.getElementById('sheets-status').textContent='Enter your Google API key in Settings to connect.';
-  renderInventory();
-}
+if(cfg.apiKey) document.getElementById('cfg-api-key').value=cfg.apiKey;
+// Start sync immediately — GViz feed works without API key
+startAutoSync();
 startProjSync();
 </script>
 </body>
