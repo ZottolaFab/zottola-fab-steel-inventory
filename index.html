@@ -865,17 +865,18 @@ function typeToRow(t){return[t.id,t.name,t.wft||'',t.category||''];}
 // ── READ FROM SHEET ──────────────────────────────────────────────────
 async function readTab(tab){
   try{
+    // Use GViz public feed — works with public sheet sharing, no API key needed
     const url=`https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent(tab)}&_=${Date.now()}`;
-    const r=await fetch(url);
+    const r=await fetch(url,{cache:'no-store'});
     if(!r.ok) return null;
     const txt=await r.text();
     if(!txt.includes('table')) return null;
     const json=JSON.parse(txt.replace(/^[^(]+\(|\);?$/g,''));
     if(!json.table||!json.table.rows) return null;
     const rows=json.table.rows.map(row=>
-      (json.table.cols||[]).map((c,i)=>row.c&&row.c[i]&&row.c[i].v!=null?row.c[i].v:'')
+      (json.table.cols||[]).map((c,i)=>row.c&&row.c[i]&&row.c[i].v!=null?String(row.c[i].v):'')
     );
-    return rows.filter(r=>r&&r[0]); // skip empty rows
+    return rows.filter(r=>r&&r[0]&&r[0]!=='');
   }catch(e){
     console.error('readTab error:', tab, e.message);
     return null;
@@ -2216,7 +2217,8 @@ function updateInboxSummary(){
 }
 
 async function commitInboxReview(){
-  const included=inboxItems.filter(i=>i._included);
+  const groupItems=currentInboxGroup?currentInboxGroup.items:inboxItems;
+  const included=groupItems.filter(i=>i._included&&!i._imported);
   if(!included.length){toast('No items included','danger');return;}
 
   // Split into assigned (has project) and unassigned
