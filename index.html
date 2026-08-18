@@ -892,7 +892,7 @@ async function readTab(tab){
 async function readTabGViz(tab){
   try{
     const url=`https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent(tab)}&_=${Date.now()}`;
-    const r=await fetch(url,{cache:'no-store'});
+    const r=await fetch(url,{cache:'no-store',credentials:'omit'});
     if(!r.ok) return null;
     const txt=await r.text();
     if(!txt.includes('table')) return null;
@@ -990,7 +990,8 @@ async function scriptWrite(action, data){
       method: 'POST',
       headers: {'Content-Type': 'text/plain'},
       body: JSON.stringify(data),
-      redirect: 'follow'
+      redirect: 'follow',
+      credentials: 'omit'
     });
     const text = await r.text();
     console.log('scriptWrite response:', action, text.slice(0,200));
