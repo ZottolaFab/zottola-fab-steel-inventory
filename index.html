@@ -813,7 +813,7 @@ function saveCache(){
 }
 
 // ── HELPERS ──────────────────────────────────────────────────────────
-function toast(msg,type){const t=document.getElementById('toast');t.textContent=msg;t.style.background=type==='danger'?'var(--danger-bg)':type==='success'?'var(--success-bg)':'var(--surface2)';t.style.color=type==='danger'?'var(--danger)':type==='success'?'var(--success)':'var(--text)';t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2600);}
+function toast(msg,type,duration=2600){const t=document.getElementById('toast');t.textContent=msg;t.style.background=type==='danger'?'var(--danger-bg)':type==='success'?'var(--success-bg)':'var(--surface2)';t.style.color=type==='danger'?'var(--danger)':type==='success'?'var(--success)':'var(--text)';t.classList.add('show');setTimeout(()=>t.classList.remove('show'),duration);}
 function openModal(id){document.getElementById(id).classList.add('open')}
 function closeModal(id){document.getElementById(id).classList.remove('open')}
 function fmtLen(ft,inches){if(!ft&&!inches)return '';const f=parseInt(ft)||0,i=parseInt(inches)||0;return i?`${f}' ${i}"`:`${f}'`;}
@@ -957,10 +957,12 @@ async function scriptWrite(action, data){
       body: JSON.stringify(data)
     });
     const result = await r.json();
+    if(!result.success) console.error('scriptWrite failed:', action, result);
     return result;
   }catch(e){
-    toast('Write failed — check Apps Script','danger');
-    return {success:false};
+    console.error('scriptWrite error:', action, e.message);
+    toast('Write failed: ' + e.message, 'danger', 8000);
+    return {success:false, error:e.message};
   }
 }
 
@@ -983,21 +985,18 @@ async function markInboxRowsImported(rowIndices, projectMap){
 
 // Simpler approach — rewrite entire inbox with status updated
 async function updateInboxStatus(rowIndices, projectMap){
-  // Update ONLY the Status and Project cells for committed rows
-  let allSuccess=true;
-  for(const idx of rowIndices){
-    const project = projectMap[idx] || '';
-    const result=await scriptWrite('updateCells', {
-      tab: TABS.inbox,
-      row: idx,
-      updates: {
-        17: 'Imported',
-        18: project
-      }
-    });
-    if(!result||!result.success) allSuccess=false;
-  }
-  if(!allSuccess) toast('Warning — some inbox status updates may not have saved','danger');
+  // Single call to update all committed rows at once
+  const updates = rowIndices.map(idx=>({
+    row: idx,
+    col17: 'Imported',
+    col18: projectMap[idx] || ''
+  }));
+  const result = await scriptWrite('updateCells', {
+    tab: TABS.inbox,
+    multiRow: true,
+    updates: updates
+  });
+  if(!result||!result.success) toast('Warning — inbox status may not have saved','danger');
 }
 
 // ── DUPLICATE CHECK ──────────────────────────────────────────────────
