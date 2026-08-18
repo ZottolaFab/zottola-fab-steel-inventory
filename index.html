@@ -864,18 +864,25 @@ function typeToRow(t){return[t.id,t.name,t.wft||'',t.category||''];}
 
 // ── READ FROM SHEET ──────────────────────────────────────────────────
 async function readTab(tab){
-  if(!cfg.apiKey) return null;
   try{
-    const r=await fetch(sheetsURL(tab));
+    const url=`https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent(tab)}&_=${Date.now()}`;
+    const r=await fetch(url);
     if(!r.ok) return null;
-    const d=await r.json();
-    const rows=(d.values||[]).slice(1); // skip header
-    return rows.filter(r=>r&&r[0]); // skip empty
-  }catch(e){return null;}
+    const txt=await r.text();
+    if(!txt.includes('table')) return null;
+    const json=JSON.parse(txt.replace(/^[^(]+\(|\);?$/g,''));
+    if(!json.table||!json.table.rows) return null;
+    const rows=json.table.rows.map(row=>
+      (json.table.cols||[]).map((c,i)=>row.c&&row.c[i]&&row.c[i].v!=null?row.c[i].v:'')
+    );
+    return rows.filter(r=>r&&r[0]); // skip empty rows
+  }catch(e){
+    console.error('readTab error:', tab, e.message);
+    return null;
+  }
 }
 
 async function syncAll(manual=false){
-  if(!cfg.apiKey){setSyncUI('err','No API key');return;}
   if(manual) setSyncUI('syncing','syncing…');
   try{
     // Read inventory
