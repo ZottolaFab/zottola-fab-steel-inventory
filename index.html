@@ -956,12 +956,13 @@ async function scriptWrite(action, data){
       headers: {'Content-Type': 'text/plain'},
       body: JSON.stringify(data)
     });
-    const result = await r.json();
+    const text = await r.text();
+    console.log('scriptWrite response:', action, text.slice(0,200));
+    const result = JSON.parse(text);
     if(!result.success) console.error('scriptWrite failed:', action, result);
     return result;
   }catch(e){
     console.error('scriptWrite error:', action, e.message);
-    toast('Write failed: ' + e.message, 'danger', 8000);
     return {success:false, error:e.message};
   }
 }
