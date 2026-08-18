@@ -245,7 +245,16 @@ h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,
 <div style="display:flex;flex-direction:column;min-height:100vh">
 
 <!-- TOPBAR -->
-<div class="topbar">
+<!-- LOCAL FILE WARNING -->
+<div id="local-file-warning" style="display:none;background:#ef4444;color:#fff;padding:12px 16px;text-align:center;font-size:14px;font-weight:600;position:sticky;top:0;z-index:9999;line-height:1.5">
+  ⚠️ You are opening this file locally — nothing will work!<br>
+  <span style="font-size:12px;font-weight:400">Upload to GitHub first, then open: <strong>https://zottolafab.github.io/zottola-fab-steel-inventory</strong></span>
+</div>
+<script>
+  if(location.protocol==='file:'){
+    document.getElementById('local-file-warning').style.display='block';
+  }
+</script>
   <div class="topbar-brand">
     <div class="topbar-logo">ZF</div>
     <span class="topbar-name">Zottola Fab <span>·</span> Steel Inventory</span>
@@ -971,18 +980,20 @@ async function markInboxRowsImported(rowIndices, projectMap){
 // Simpler approach — rewrite entire inbox with status updated
 async function updateInboxStatus(rowIndices, projectMap){
   // Update ONLY the Status and Project cells for committed rows
-  // Uses updateCells action to avoid rewriting the entire sheet
+  let allSuccess=true;
   for(const idx of rowIndices){
     const project = projectMap[idx] || '';
-    await scriptWrite('updateCells', {
+    const result=await scriptWrite('updateCells', {
       tab: TABS.inbox,
-      row: idx, // 1-based row index including header
+      row: idx,
       updates: {
-        17: 'Imported',  // col Q = Status
-        18: project       // col R = Project
+        17: 'Imported',
+        18: project
       }
     });
+    if(!result||!result.success) allSuccess=false;
   }
+  if(!allSuccess) toast('Warning — some inbox status updates may not have saved','danger');
 }
 
 // ── DUPLICATE CHECK ──────────────────────────────────────────────────
