@@ -923,6 +923,7 @@ async function syncAll(manual=false){
     const inboxRows=await readTab(TABS.inbox);
     console.log('Inbox rows read:', inboxRows?inboxRows.length:'null');
     if(inboxRows!==null){
+      console.log('Inbox statuses:', inboxRows.map(r=>r[16]));
       inboxItems=inboxRows.filter(r=>r&&r[0]&&(!r[16]||r[16].toString().trim().toLowerCase()!=='imported')&&(r[6]||r[4])).map((r,i)=>{
         // Find the actual row index in the full inboxRows array (not filtered)
         const actualRowIdx=inboxRows.indexOf(r)+2; // +1 for header, +1 for 1-based
