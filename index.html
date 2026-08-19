@@ -864,46 +864,27 @@ function typeToRow(t){return[t.id,t.name,t.wft||'',t.category||''];}
 
 // ── READ FROM SHEET ──────────────────────────────────────────────────
 async function readTab(tab){
-  try{
-    // Send tab in URL so it survives Google's redirect, action in body
-    const url = APPS_SCRIPT_URL + '?action=readSheet&tab=' + encodeURIComponent(tab);
-    const r = await fetch(url, {
-      method: 'POST',
-      headers: {'Content-Type': 'text/plain'},
-      body: JSON.stringify({tab: tab}),
-      redirect: 'follow'
-    });
-    const text = await r.text();
-    console.log('readTab', tab, text.slice(0,150));
-    const result = JSON.parse(text);
-    if(result && result.rows) return result.rows.filter(r=>r&&r[0]!==''&&r[0]!==null&&r[0]!==undefined);
-    // If {status:'ok'} returned, try reading from GViz as fallback
-    if(result && result.status==='ok'){
-      console.warn('readTab got doGet response, trying GViz fallback for', tab);
-      return await readTabGViz(tab);
-    }
-    return null;
-  }catch(e){
-    console.error('readTab error:', tab, e.message);
-    return await readTabGViz(tab);
-  }
+  // GViz feed confirmed working on personal Gmail sheet
+  return await readTabGViz(tab);
 }
 
 async function readTabGViz(tab){
   try{
     const url=`https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent(tab)}&_=${Date.now()}`;
     const r=await fetch(url,{cache:'no-store',credentials:'omit'});
-    if(!r.ok) return null;
+    if(!r.ok){console.error('readTab HTTP error:',tab,r.status);return null;}
     const txt=await r.text();
-    if(!txt.includes('table')) return null;
+    if(!txt.includes('table')){console.error('readTab no table:',tab);return null;}
     const json=JSON.parse(txt.replace(/^[^(]+\(|\);?$/g,''));
     if(!json.table||!json.table.rows) return [];
     const rows=json.table.rows.map(row=>
-      (json.table.cols||[]).map((c,i)=>row.c&&row.c[i]&&row.c[i].v!=null?String(row.c[i].v):'')
+      (json.table.cols||[]).map((c,i)=>row.c&&row.c[i]&&row.c[i].v!=null?
+        (row.c[i].f!=null?String(row.c[i].f):String(row.c[i].v)):'')
     );
+    console.log('readTab',tab,'rows:',rows.length);
     return rows.filter(r=>r&&r[0]&&r[0]!=='');
   }catch(e){
-    console.error('readTabGViz error:', tab, e.message);
+    console.error('readTabGViz error:',tab,e.message);
     return null;
   }
 }
