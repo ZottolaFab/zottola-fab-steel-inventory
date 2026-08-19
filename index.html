@@ -923,10 +923,14 @@ async function syncAll(manual=false){
     const inboxRows=await readTab(TABS.inbox);
     console.log('Inbox rows read:', inboxRows?inboxRows.length:'null');
     if(inboxRows!==null){
-      console.log('Inbox statuses:', inboxRows.map(r=>r[16]));
-      inboxItems=inboxRows.filter(r=>r&&r[0]&&(!r[16]||r[16].toString().trim().toLowerCase()!=='imported')&&(r[6]||r[4])).map((r,i)=>{
-        // Find the actual row index in the full inboxRows array (not filtered)
-        const actualRowIdx=inboxRows.indexOf(r)+2; // +1 for header, +1 for 1-based
+      // Strip header row — GViz returns it as data when parsedNumHeaders:0
+      const inboxDataRows=inboxRows.filter(r=>r[0]&&r[0]!=='Supplier');
+      console.log('Inbox statuses:', inboxDataRows.map(r=>r[16]));
+      inboxItems=inboxDataRows.filter(r=>r&&r[0]&&(!r[16]||r[16].toString().trim().toLowerCase()!=='imported')&&(r[6]||r[4])).map((r,i)=>{
+        // Row index in sheet: header=row1, data starts row2
+        // inboxDataRows index is 0-based, so sheet row = index+2
+        const actualRowIdx=inboxDataRows.indexOf(r)+2; // +1 for header row, +1 for 1-based
+        console.log('inbox item rowIdx:',actualRowIdx,'supplier:',r[0],'status:',r[16]);
         return {
         _rowIdx:actualRowIdx,
         supplier:r[0]||'',invoiceNum:r[1]||'',poNum:r[2]||'',invoiceDate:r[3]||'',
@@ -2075,6 +2079,7 @@ function renderInboxSection(){
 }
 
 let currentInboxGroup=null;
+const confirmedInboxRows=new Set(); // track rows confirmed this session — prevent GViz cache from restoring them
 
 function reviewInboxGroup(groupIdx){
   const groups=groupInboxByInvoice().filter(g=>g.pendingCount>0);
@@ -2360,8 +2365,8 @@ async function commitInboxReview(){
     toast(`Invoice ${invoiceNum} fully confirmed`,'success');
   }
   toast(`Added ${confirmedCount} items to inventory`,'success');
-  // Sync in background to catch any drift
-  setTimeout(()=>syncAll(false),3000);
+  // Note: no background sync — GViz cache would restore confirmed items
+  // Items removed from inboxItems in memory; sheet already updated correctly
 }
 
 function importBackToSelector(){
