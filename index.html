@@ -2311,39 +2311,41 @@ async function commitInboxReview(){
   assigned.forEach(i=>{projectMap[i._rowIdx]=i._project;});
   await updateInboxStatus(assignedIndices,projectMap);
 
-  // Always sync after commit to refresh inbox and inventory from sheet
-  await syncAll(false);
-
-  const totalCost=assigned.reduce((a,i)=>a+(parseFloat(i.totalCost)||0),0);
-  const totalWt=assigned.reduce((a,i)=>a+(parseFloat(i.weightLbs)||0),0);
-
-  // Mark committed items as imported in memory — keep in list but grayed out
-  assigned.forEach(i=>{ i._imported=true; i._included=false; });
-  if(currentInboxGroup) currentInboxGroup.pendingCount=currentInboxGroup.items.filter(i=>!i._imported).length;
-
   document.getElementById('inbox-commit-btn').textContent='Confirm assigned items & leave rest pending';
   document.getElementById('inbox-commit-btn').disabled=false;
 
-  const remainingPending=currentInboxGroup?currentInboxGroup.items.filter(i=>!i._imported).length:0;
-  if(remainingPending>0){
-    // Still items pending in this invoice — stay on review, show success bar
+  const invoiceNum=currentInboxGroup?currentInboxGroup.invoiceNum:'';
+  const confirmedCount=newEntries.length;
+
+  // Sync from sheet — this reloads inboxItems filtering out Imported rows
+  currentInboxGroup=null;
+  await syncAll(false);
+
+  // After sync, check if this invoice still has pending items
+  const groups=groupInboxByInvoice().filter(g=>g.pendingCount>0);
+  const stillPending=groups.find(g=>g.invoiceNum===invoiceNum);
+
+  if(stillPending){
+    // Re-enter review for remaining items
+    currentInboxGroup=stillPending;
+    document.getElementById('import-selector-view').style.display='none';
+    document.getElementById('import-inbox-review').style.display='block';
     const err=document.getElementById('inbox-review-error');
     err.style.display='block';
     err.style.background='var(--success-bg)';
     err.style.borderColor='var(--success-dim)';
     err.style.color='var(--success)';
-    err.textContent=`✅ ${newEntries.length} items confirmed · ${remainingPending} still pending — assign projects when ready`;
+    err.textContent=`✅ ${confirmedCount} items confirmed · ${stillPending.items.length} still pending — assign projects when ready`;
     renderInboxReviewItems();
   }else{
-    // All items in this invoice confirmed — go back to selector
+    // All done — go back to selector
     document.getElementById('import-inbox-review').style.display='none';
     document.getElementById('import-selector-view').style.display='block';
     renderImportSelector();
     renderInboxSection();
-    toast(`Invoice ${currentInboxGroup?currentInboxGroup.invoiceNum:''} fully confirmed`,'success');
-    currentInboxGroup=null;
+    toast(`Invoice ${invoiceNum} fully confirmed`,'success');
   }
-  toast(`Added ${newEntries.length} · ${remainingPending} still pending`,'success');
+  toast(`Added ${confirmedCount} items to inventory`,'success');
 }
 
 function importBackToSelector(){
