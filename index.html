@@ -892,9 +892,9 @@ async function readTabGViz(tab){
 async function syncAll(manual=false){
   if(manual) setSyncUI('syncing','syncing…');
   try{
-    // Read inventory
+    // Read inventory — filter out header row (GViz returns it as data when parsedNumHeaders:0)
     const invRows=await readTab(TABS.inv);
-    if(invRows!==null) inventory=invRows.map(rowToInv);
+    if(invRows!==null) inventory=invRows.filter(r=>r&&r[0]&&r[0]!=='ID').map(rowToInv);
 
     // Read usage log
     const logRows=await readTab(TABS.log);
