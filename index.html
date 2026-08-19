@@ -2293,16 +2293,10 @@ async function commitInboxReview(){
 
   newEntries.forEach(e=>inventory.unshift(e));
 
-  // Use appendRows instead of full rewrite — faster and more reliable
-  const rows = newEntries.map(e=>invToRow(e));
-  const result = await scriptWrite('appendRows', {
-    tab: TABS.inv,
-    rows: rows,
-    header: INV_HEADER
-  });
+  // ALWAYS use writeSheet for inventory — never appendRows (causes duplicates)
+  const result = await writeInventoryToSheet();
 
   if(!result||!result.success){
-    // Remove the entries we just added since write failed
     newEntries.forEach(e=>{const idx=inventory.indexOf(e);if(idx>-1)inventory.splice(idx,1);});
     toast('Write failed — check connection','danger',8000);
     console.error('writeInventoryToSheet failed:', result);
@@ -2317,8 +2311,8 @@ async function commitInboxReview(){
   assigned.forEach(i=>{projectMap[i._rowIdx]=i._project;});
   await updateInboxStatus(assignedIndices,projectMap);
 
-  // Only do full sync if all items are done
-  if(unassigned.length===0) await syncAll(false);
+  // Always sync after commit to refresh inbox and inventory from sheet
+  await syncAll(false);
 
   const totalCost=assigned.reduce((a,i)=>a+(parseFloat(i.totalCost)||0),0);
   const totalWt=assigned.reduce((a,i)=>a+(parseFloat(i.weightLbs)||0),0);
