@@ -1466,6 +1466,12 @@ function renderInventory(){
         <span class="meta-chip">${new Date(item.added).toLocaleDateString()}</span>
         ${item.edited?`<span class="meta-chip edited">edited</span>`:''}${item.docType==='PO'?`<span class="meta-chip" style="color:#60a5fa">On Order</span>`:''}${item.docType==='Invoice'?`<span class="meta-chip" style="color:var(--success)">Received</span>`:''}
       </div>
+      <div class="inv-meta" style="margin-top:2px">
+        ${item.supplier?`<span class="meta-chip" style="color:var(--text2)">${item.supplier}</span>`:''}
+        ${item.invoiceNum?`<span class="meta-chip">Inv: ${item.invoiceNum}</span>`:''}
+        ${item.poNum?`<span class="meta-chip" style="color:var(--accent);font-weight:600">PO: ${item.poNum}</span>`:''}
+        ${item.projectOrStock?`<span class="meta-chip" style="color:var(--warning)">${item.projectOrStock}</span>`:''}
+      </div>
       <div class="inv-footer">
         <div class="qty-row">
           <span style="font-size:12px;color:var(--text3)">Rem</span>
@@ -2318,28 +2324,35 @@ async function commitInboxReview(){
   const invoiceNum=currentInboxGroup?currentInboxGroup.invoiceNum:'';
   const confirmedCount=newEntries.length;
 
-  // Sync from sheet — this reloads inboxItems filtering out Imported rows
-  currentInboxGroup=null;
-  await syncAll(false);
+  // Remove confirmed items from inboxItems in memory immediately
+  // (don't wait for GViz cache to clear — it can take minutes)
+  const confirmedRowIndices=new Set(assigned.map(i=>i._rowIdx));
+  inboxItems=inboxItems.filter(i=>!confirmedRowIndices.has(i._rowIdx));
 
-  // After sync, check if this invoice still has pending items
-  const groups=groupInboxByInvoice().filter(g=>g.pendingCount>0);
-  const stillPending=groups.find(g=>g.invoiceNum===invoiceNum);
+  // Check if this invoice still has unconfirmed items remaining
+  const remainingForInvoice=inboxItems.filter(i=>i.invoiceNum===invoiceNum);
 
-  if(stillPending){
-    // Re-enter review for remaining items
-    currentInboxGroup=stillPending;
-    document.getElementById('import-selector-view').style.display='none';
-    document.getElementById('import-inbox-review').style.display='block';
+  if(remainingForInvoice.length>0){
+    // Rebuild group from remaining items and stay on review screen
+    currentInboxGroup={
+      invoiceNum:invoiceNum,
+      supplier:remainingForInvoice[0].supplier,
+      invoiceDate:remainingForInvoice[0].invoiceDate,
+      poNum:remainingForInvoice[0].poNum,
+      items:remainingForInvoice,
+      pendingCount:remainingForInvoice.length,
+      totalCost:remainingForInvoice.reduce((a,i)=>a+(parseFloat(i.totalCost)||0),0)
+    };
     const err=document.getElementById('inbox-review-error');
     err.style.display='block';
     err.style.background='var(--success-bg)';
     err.style.borderColor='var(--success-dim)';
     err.style.color='var(--success)';
-    err.textContent=`✅ ${confirmedCount} items confirmed · ${stillPending.items.length} still pending — assign projects when ready`;
+    err.textContent=`✅ ${confirmedCount} items confirmed · ${remainingForInvoice.length} still pending — assign projects when ready`;
     renderInboxReviewItems();
   }else{
-    // All done — go back to selector
+    // All items confirmed — go back to selector
+    currentInboxGroup=null;
     document.getElementById('import-inbox-review').style.display='none';
     document.getElementById('import-selector-view').style.display='block';
     renderImportSelector();
@@ -2347,6 +2360,8 @@ async function commitInboxReview(){
     toast(`Invoice ${invoiceNum} fully confirmed`,'success');
   }
   toast(`Added ${confirmedCount} items to inventory`,'success');
+  // Sync in background to catch any drift
+  setTimeout(()=>syncAll(false),3000);
 }
 
 function importBackToSelector(){
