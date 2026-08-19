@@ -2087,6 +2087,10 @@ function reviewInbox(){
 
 function renderInboxReviewItems(){
   const groupItems=currentInboxGroup?currentInboxGroup.items:inboxItems;
+  // Force _project from sheet data for pre-populated items
+  groupItems.forEach(item=>{
+    if(!item._project&&item.project) item._project=item.project;
+  });
   document.getElementById('inbox-review-count').textContent=groupItems.length+' items';
   const list=document.getElementById('inbox-review-items');
   list.innerHTML='';
@@ -2142,15 +2146,15 @@ function renderInboxReviewItems(){
         </div>
         <div style="grid-column:1/-1">
           <div style="font-size:10px;font-weight:600;color:var(--accent);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:5px">Project / Stock <span style="color:var(--accent)">*</span></div>
-          <select id="inbx-proj-${i}" onchange="onInboxProjSel(${i},this.value)"
+          <select id="inbx-proj-${globalIdx}" onchange="onInboxProjSel(${globalIdx},this.value)"
             style="width:100%;padding:8px 10px;font-size:13px;border:1px solid var(--accent-dim);border-radius:var(--radius);background:var(--surface2);color:var(--text);font-family:var(--font);margin-bottom:6px">
             <option value="">— select project or stock —</option>
             <option value="STOCK">📦 STOCK</option>
             ${projects.map(p=>`<option value="${p}" ${item._project===p?'selected':''}>${p}</option>`).join('')}
             <option value="__new__">+ Add new project…</option>
           </select>
-          <div id="inbx-proj-new-${i}" style="display:none">
-            <input type="text" placeholder="Type new project name" id="inbx-proj-newval-${i}"
+          <div id="inbx-proj-new-${globalIdx}" style="display:none">
+            <input type="text" placeholder="Type new project name" id="inbx-proj-newval-${globalIdx}"
               style="width:100%;padding:8px 10px;font-size:13px;border:1px solid var(--accent-dim);border-radius:var(--radius);background:var(--accent-bg);color:var(--text);font-family:var(--font)"
               oninput="inboxItems[${globalIdx}]._project=this.value">
           </div>
