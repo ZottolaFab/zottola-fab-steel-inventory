@@ -2320,15 +2320,35 @@ async function commitInboxReview(){
   if(!included.length){toast('No items included','danger');return;}
 
   // SYNC PROJECT VALUES FROM DROPDOWNS BEFORE COMMIT using _rowIdx as stable key
+  // Priority: typed custom input > dropdown selection > master inboxItems array
+  console.log('=== COMMIT SYNC DEBUG ===');
+  console.log('included items:', included.length);
   included.forEach(item=>{
-    const sel=document.getElementById('inbx-proj-'+item._rowIdx);
+    const rowKey=item._rowIdx;
+    // 1. Check typed custom input first
+    const customInput=document.getElementById('inbx-proj-newval-'+rowKey);
+    if(customInput && customInput.value.trim()){
+      item._project=customInput.value.trim();
+      console.log('rowKey '+rowKey+' ['+item.size+']: custom input => '+item._project);
+      return;
+    }
+    // 2. Check dropdown selection
+    const sel=document.getElementById('inbx-proj-'+rowKey);
     if(sel && sel.value.trim() && sel.value!=='__new__'){
       item._project=sel.value.trim();
+      console.log('rowKey '+rowKey+' ['+item.size+']: dropdown => '+item._project);
+      return;
     }
-    // Also sync from master inboxItems array
-    const master=inboxItems.find(i=>i._rowIdx===item._rowIdx);
-    if(master && master._project) item._project=master._project;
+    // 3. Fall back to master inboxItems array
+    const master=inboxItems.find(i=>i._rowIdx===rowKey);
+    if(master && master._project && master._project.trim()){
+      item._project=master._project.trim();
+      console.log('rowKey '+rowKey+' ['+item.size+']: master => '+item._project);
+      return;
+    }
+    console.warn('rowKey '+rowKey+' ['+item.size+']: NO PROJECT — sel='+(sel?sel.value:'no-el')+' master='+(master?master._project:'no-master'));
   });
+  console.log('=== END SYNC DEBUG ===');
 
   // ATOMIC MODEL: ALL items must be assigned, or nothing commits
   const assigned=included.filter(i=>i._project.trim());
