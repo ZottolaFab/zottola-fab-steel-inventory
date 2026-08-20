@@ -2232,10 +2232,25 @@ function onInboxProjSel(i,val){
 }
 
 function validateInboxCompleteness(){
-  // ATOMIC WORKFLOW: Check if ALL included items have projects assigned
+  // ATOMIC WORKFLOW: Check if ALL displayed items have projects assigned
+  // Read directly from the DOM dropdowns to avoid stale object references
   const groupItems=currentInboxGroup?currentInboxGroup.items:inboxItems;
   const included=groupItems.filter(i=>i._included&&!i._imported);
-  const unassigned=included.filter(i=>!i._project||!i._project.trim());
+  
+  let unassigned=[];
+  included.forEach((item,idx)=>{
+    const globalIdx=inboxItems.indexOf(item);
+    const projSelect=document.getElementById('inbx-proj-'+globalIdx);
+    const projVal=projSelect?projSelect.value.trim():'';
+    if(!projVal){
+      unassigned.push(item);
+      // Also sync the data model
+      if(inboxItems[globalIdx]) inboxItems[globalIdx]._project='';
+    } else {
+      // Sync the value from dropdown to data model
+      if(inboxItems[globalIdx]) inboxItems[globalIdx]._project=projVal;
+    }
+  });
   
   const btn=document.getElementById('inbox-commit-btn');
   const errDiv=document.getElementById('inbox-review-error');
@@ -2249,13 +2264,18 @@ function validateInboxCompleteness(){
     errDiv.style.borderColor='var(--warning)';
     errDiv.style.color='var(--warning)';
     errDiv.textContent=`⚠️ ${unassigned.length} item(s) still need a project: ${unassigned.map(u=>'•'+u.size).join(' ')}`;
-  } else {
+    return false;
+  } else if(included.length>0) {
     btn.disabled=false;
     btn.style.opacity='1';
     btn.style.cursor='pointer';
     errDiv.style.display='none';
+    return true;
+  } else {
+    btn.disabled=true;
+    errDiv.style.display='none';
+    return false;
   }
-  updateInboxSummary();
 }
 
 function updateInboxSummary(){
