@@ -532,10 +532,10 @@ h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,
       </div>
     </div>
     <div style="background:var(--danger-bg);border:1px solid var(--danger);border-radius:var(--radius);padding:10px 12px;font-size:13px;color:var(--danger);display:none" id="inbox-review-error"></div>
-    <button class="btn btn-primary btn-full" onclick="commitInboxReview()" id="inbox-commit-btn">
-      <i class="ti ti-database-import"></i> Confirm assigned items &amp; leave rest pending
+    <button class="btn btn-primary btn-full" onclick="commitInboxReview()" id="inbox-commit-btn" disabled style="opacity:0.5;cursor:not-allowed">
+      <i class="ti ti-database-import"></i> Confirm all &amp; add to inventory
     </button>
-    <p style="font-size:11px;color:var(--text3);text-align:center;padding-bottom:20px">Only items with a project assigned will be added · Unassigned items stay in the inbox</p>
+    <p style="font-size:11px;color:var(--text3);text-align:center;padding-bottom:20px">Assign a project to every item to proceed · This invoice will be confirmed as a complete set</p>
   </div>
 
 <div id="import-result-view" style="display:none;padding:14px">
@@ -2175,7 +2175,7 @@ function renderInboxReviewItems(){
       </div>`;
     list.appendChild(div);
   });
-  updateInboxSummary();
+  validateInboxCompleteness();
 }
 
 function splitInboxFuelSurcharge(){
@@ -2227,6 +2227,35 @@ function onInboxProjSel(i,val){
   const nd=document.getElementById('inbx-proj-new-'+i);
   if(val==='__new__'){nd.style.display='block';if(inboxItems[i])inboxItems[i]._project='';document.getElementById('inbx-proj-newval-'+i)?.focus();}
   else{nd.style.display='none';if(inboxItems[i])inboxItems[i]._project=val;}
+  // Atomic workflow: validate that ALL items now have projects
+  validateInboxCompleteness();
+}
+
+function validateInboxCompleteness(){
+  // ATOMIC WORKFLOW: Check if ALL included items have projects assigned
+  const groupItems=currentInboxGroup?currentInboxGroup.items:inboxItems;
+  const included=groupItems.filter(i=>i._included&&!i._imported);
+  const unassigned=included.filter(i=>!i._project||!i._project.trim());
+  
+  const btn=document.getElementById('inbox-commit-btn');
+  const errDiv=document.getElementById('inbox-review-error');
+  
+  if(unassigned.length>0){
+    btn.disabled=true;
+    btn.style.opacity='0.5';
+    btn.style.cursor='not-allowed';
+    errDiv.style.display='block';
+    errDiv.style.background='var(--warning-bg)';
+    errDiv.style.borderColor='var(--warning)';
+    errDiv.style.color='var(--warning)';
+    errDiv.textContent=`⚠️ ${unassigned.length} item(s) still need a project: ${unassigned.map(u=>'•'+u.size).join(' ')}`;
+  } else {
+    btn.disabled=false;
+    btn.style.opacity='1';
+    btn.style.cursor='pointer';
+    errDiv.style.display='none';
+  }
+  updateInboxSummary();
 }
 
 function updateInboxSummary(){
@@ -2244,13 +2273,19 @@ async function commitInboxReview(){
   const included=groupItems.filter(i=>i._included&&!i._imported);
   if(!included.length){toast('No items included','danger');return;}
 
-  // Split into assigned (has project) and unassigned
+  // ATOMIC MODEL: ALL items must be assigned, or nothing commits
   const assigned=included.filter(i=>i._project.trim());
   const unassigned=included.filter(i=>!i._project.trim());
 
+  if(unassigned.length>0){
+    document.getElementById('inbox-review-error').style.display='block';
+    document.getElementById('inbox-review-error').textContent=`❌ ALL items must have a project assigned. ${unassigned.length} item(s) still unassigned: ${unassigned.map(u=>'•'+u.size).join(' ')}`;
+    return;
+  }
+  
   if(!assigned.length){
     document.getElementById('inbox-review-error').style.display='block';
-    document.getElementById('inbox-review-error').textContent='No items have a project assigned yet. Assign at least one project to confirm.';
+    document.getElementById('inbox-review-error').textContent='No items with projects. Add at least one item and assign it to proceed.';
     return;
   }
   document.getElementById('inbox-review-error').style.display='none';
@@ -2312,59 +2347,38 @@ async function commitInboxReview(){
     newEntries.forEach(e=>{const idx=inventory.indexOf(e);if(idx>-1)inventory.splice(idx,1);});
     toast('Write failed — check connection','danger',8000);
     console.error('writeInventoryToSheet failed:', result);
-    document.getElementById('inbox-commit-btn').textContent='Confirm assigned items & leave rest pending';
-    document.getElementById('inbox-commit-btn').disabled=false;
+    document.getElementById('inbox-commit-btn').textContent='Confirm all & add to inventory';
+    document.getElementById('inbox-commit-btn').disabled=true;
+    document.getElementById('inbox-commit-btn').style.opacity='0.5';
     return;
   }
 
-  // Mark only assigned rows as Imported — unassigned stay blank (pending)
-  const assignedIndices=assigned.map(i=>i._rowIdx);
+  // Mark ALL rows for this invoice as Imported (atomic commit)
+  const allIndices=included.map(i=>i._rowIdx);
   const projectMap={};
-  assigned.forEach(i=>{projectMap[i._rowIdx]=i._project;});
-  await updateInboxStatus(assignedIndices,projectMap);
+  included.forEach(i=>{projectMap[i._rowIdx]=i._project;});
+  await updateInboxStatus(allIndices,projectMap);
 
-  document.getElementById('inbox-commit-btn').textContent='Confirm assigned items & leave rest pending';
-  document.getElementById('inbox-commit-btn').disabled=false;
+  document.getElementById('inbox-commit-btn').textContent='Confirm all & add to inventory';
+  document.getElementById('inbox-commit-btn').disabled=true;
+  document.getElementById('inbox-commit-btn').style.opacity='0.5';
 
   const invoiceNum=currentInboxGroup?currentInboxGroup.invoiceNum:'';
   const confirmedCount=newEntries.length;
 
   // Remove confirmed items from inboxItems in memory immediately
-  // (don't wait for GViz cache to clear — it can take minutes)
-  const confirmedRowIndices=new Set(assigned.map(i=>i._rowIdx));
+  // ATOMIC MODEL: All items were assigned, so entire invoice is confirmed
+  const confirmedRowIndices=new Set(allIndices);
   inboxItems=inboxItems.filter(i=>!confirmedRowIndices.has(i._rowIdx));
 
-  // Check if this invoice still has unconfirmed items remaining
-  const remainingForInvoice=inboxItems.filter(i=>i.invoiceNum===invoiceNum);
-
-  if(remainingForInvoice.length>0){
-    // Rebuild group from remaining items and stay on review screen
-    currentInboxGroup={
-      invoiceNum:invoiceNum,
-      supplier:remainingForInvoice[0].supplier,
-      invoiceDate:remainingForInvoice[0].invoiceDate,
-      poNum:remainingForInvoice[0].poNum,
-      items:remainingForInvoice,
-      pendingCount:remainingForInvoice.length,
-      totalCost:remainingForInvoice.reduce((a,i)=>a+(parseFloat(i.totalCost)||0),0)
-    };
-    const err=document.getElementById('inbox-review-error');
-    err.style.display='block';
-    err.style.background='var(--success-bg)';
-    err.style.borderColor='var(--success-dim)';
-    err.style.color='var(--success)';
-    err.textContent=`✅ ${confirmedCount} items confirmed · ${remainingForInvoice.length} still pending — assign projects when ready`;
-    renderInboxReviewItems();
-  }else{
-    // All items confirmed — go back to selector
-    currentInboxGroup=null;
-    document.getElementById('import-inbox-review').style.display='none';
-    document.getElementById('import-selector-view').style.display='block';
-    renderImportSelector();
-    renderInboxSection();
-    toast(`Invoice ${invoiceNum} fully confirmed`,'success');
-  }
-  toast(`Added ${confirmedCount} items to inventory`,'success');
+  // In atomic model, invoice is fully done — no remaining items
+  currentInboxGroup=null;
+  document.getElementById('import-inbox-review').style.display='none';
+  document.getElementById('import-selector-view').style.display='block';
+  renderImportSelector();
+  renderInboxSection();
+  
+  toast(`✅ Invoice ${invoiceNum} confirmed · ${confirmedCount} items added to inventory`,'success');
   // Note: no background sync — GViz cache would restore confirmed items
   // Items removed from inboxItems in memory; sheet already updated correctly
 }
