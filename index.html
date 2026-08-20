@@ -2289,6 +2289,19 @@ async function commitInboxReview(){
   const included=groupItems.filter(i=>i._included&&!i._imported);
   if(!included.length){toast('No items included','danger');return;}
 
+  // SYNC PROJECT VALUES FROM DROPDOWNS BEFORE COMMIT
+  // This ensures we capture what user actually selected
+  included.forEach(item=>{
+    const globalIdx=inboxItems.indexOf(item);
+    if(globalIdx>=0){
+      const projSelect=document.getElementById('inbx-proj-'+globalIdx);
+      if(projSelect){
+        const newProjVal=projSelect.value.trim();
+        item._project=newProjVal; // Update the item reference we'll commit
+      }
+    }
+  });
+
   // ATOMIC MODEL: ALL items must be assigned, or nothing commits
   const assigned=included.filter(i=>i._project.trim());
   const unassigned=included.filter(i=>!i._project.trim());
