@@ -2225,37 +2225,42 @@ function toggleInboxItem(i){
 
 function onInboxProjSel(i,val){
   const nd=document.getElementById('inbx-proj-new-'+i);
-  if(val==='__new__'){nd.style.display='block';if(inboxItems[i])inboxItems[i]._project='';document.getElementById('inbx-proj-newval-'+i)?.focus();}
-  else{nd.style.display='none';if(inboxItems[i])inboxItems[i]._project=val;}
+  if(val==='__new__'){
+    nd.style.display='block';
+    if(inboxItems[i]) inboxItems[i]._project='';
+    document.getElementById('inbx-proj-newval-'+i)?.focus();
+  } else {
+    nd.style.display='none';
+    if(inboxItems[i]) inboxItems[i]._project=val;
+  }
   // Atomic workflow: validate that ALL items now have projects
   validateInboxCompleteness();
 }
 
 function validateInboxCompleteness(){
-  // ATOMIC WORKFLOW: Check if ALL displayed items have projects assigned
-  // Read directly from the DOM dropdowns to avoid stale object references
-  const groupItems=currentInboxGroup?currentInboxGroup.items:inboxItems;
-  const included=groupItems.filter(i=>i._included&&!i._imported);
+  // ATOMIC WORKFLOW: Check if all rendered project dropdowns have values
+  // Don't match against indices — just verify the DOM state
+  const allProjectSelects=document.querySelectorAll('[id^="inbx-proj-"]');
+  let emptyCount=0;
+  let emptyItems=[];
   
-  let unassigned=[];
-  included.forEach((item,idx)=>{
-    const globalIdx=inboxItems.indexOf(item);
-    const projSelect=document.getElementById('inbx-proj-'+globalIdx);
-    const projVal=projSelect?projSelect.value.trim():'';
-    if(!projVal){
-      unassigned.push(item);
-      // Also sync the data model
-      if(inboxItems[globalIdx]) inboxItems[globalIdx]._project='';
-    } else {
-      // Sync the value from dropdown to data model
-      if(inboxItems[globalIdx]) inboxItems[globalIdx]._project=projVal;
+  allProjectSelects.forEach(select=>{
+    const val=select.value.trim();
+    if(!val){
+      emptyCount++;
+      // Find the item size from the parent card for display
+      const card=select.closest('[id^="inbx-li-"]');
+      if(card){
+        const sizeDiv=card.querySelector('[style*="font-weight:600"]');
+        if(sizeDiv) emptyItems.push(sizeDiv.textContent);
+      }
     }
   });
   
   const btn=document.getElementById('inbox-commit-btn');
   const errDiv=document.getElementById('inbox-review-error');
   
-  if(unassigned.length>0){
+  if(emptyCount>0){
     btn.disabled=true;
     btn.style.opacity='0.5';
     btn.style.cursor='not-allowed';
@@ -2263,18 +2268,16 @@ function validateInboxCompleteness(){
     errDiv.style.background='var(--warning-bg)';
     errDiv.style.borderColor='var(--warning)';
     errDiv.style.color='var(--warning)';
-    errDiv.textContent=`⚠️ ${unassigned.length} item(s) still need a project: ${unassigned.map(u=>'•'+u.size).join(' ')}`;
-    return false;
-  } else if(included.length>0) {
+    const itemNames=emptyItems.length>0?emptyItems.map(s=>'•'+s).join(' '):('•item'+Array(emptyCount).fill(0).map((_,i)=>i+1).join(' •item'));
+    errDiv.textContent=`⚠️ ${emptyCount} item(s) still need a project: ${itemNames}`;
+  } else if(allProjectSelects.length>0) {
     btn.disabled=false;
     btn.style.opacity='1';
     btn.style.cursor='pointer';
     errDiv.style.display='none';
-    return true;
   } else {
     btn.disabled=true;
     errDiv.style.display='none';
-    return false;
   }
 }
 
