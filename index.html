@@ -2238,29 +2238,23 @@ function onInboxProjSel(i,val){
 }
 
 function validateInboxCompleteness(){
-  // ATOMIC WORKFLOW: Check if all rendered project dropdowns have values
-  // Don't match against indices — just verify the DOM state
-  const allProjectSelects=document.querySelectorAll('[id^="inbx-proj-"]');
-  let emptyCount=0;
-  let emptyItems=[];
+  // ATOMIC WORKFLOW: Check if all items in current group have projects assigned
+  // Read from data model (inboxItems) which is kept in sync by dropdown handlers
+  const groupItems=currentInboxGroup?currentInboxGroup.items:inboxItems;
+  const included=groupItems.filter(i=>i._included&&!i._imported);
   
-  allProjectSelects.forEach(select=>{
-    const val=select.value.trim();
-    if(!val){
-      emptyCount++;
-      // Find the item size from the parent card for display
-      const card=select.closest('[id^="inbx-li-"]');
-      if(card){
-        const sizeDiv=card.querySelector('[style*="font-weight:600"]');
-        if(sizeDiv) emptyItems.push(sizeDiv.textContent);
-      }
+  let unassigned=[];
+  included.forEach(item=>{
+    // Check the actual data model value
+    if(!item._project || !item._project.trim()){
+      unassigned.push(item);
     }
   });
   
   const btn=document.getElementById('inbox-commit-btn');
   const errDiv=document.getElementById('inbox-review-error');
   
-  if(emptyCount>0){
+  if(unassigned.length>0){
     btn.disabled=true;
     btn.style.opacity='0.5';
     btn.style.cursor='not-allowed';
@@ -2268,9 +2262,8 @@ function validateInboxCompleteness(){
     errDiv.style.background='var(--warning-bg)';
     errDiv.style.borderColor='var(--warning)';
     errDiv.style.color='var(--warning)';
-    const itemNames=emptyItems.length>0?emptyItems.map(s=>'•'+s).join(' '):('•item'+Array(emptyCount).fill(0).map((_,i)=>i+1).join(' •item'));
-    errDiv.textContent=`⚠️ ${emptyCount} item(s) still need a project: ${itemNames}`;
-  } else if(allProjectSelects.length>0) {
+    errDiv.textContent=`⚠️ ${unassigned.length} item(s) still need a project: ${unassigned.map(u=>'•'+u.size).join(' ')}`;
+  } else if(included.length>0) {
     btn.disabled=false;
     btn.style.opacity='1';
     btn.style.cursor='pointer';
