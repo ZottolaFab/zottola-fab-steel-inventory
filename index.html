@@ -2116,9 +2116,9 @@ function renderInboxReviewItems(){
     list.appendChild(hdr);
   }
   groupItems.forEach((item,i)=>{
-    const globalIdx=inboxItems.indexOf(item);
+    const rowKey=item._rowIdx; // Use _rowIdx as unique stable key — not indexOf (which fails for group copies)
     const div=document.createElement('div');
-    div.id='inbx-li-'+globalIdx;
+    div.id='inbx-li-'+rowKey;
     const isImported=item._imported||false;
     div.style.cssText='background:var(--surface);border:1px solid '+(isImported?'var(--success-dim)':'var(--border)')+';border-radius:12px;overflow:hidden;margin-bottom:8px;'+(isImported?'opacity:0.5;':'')+(item._included?'':'border-style:dashed;opacity:0.4;');
     div.innerHTML=`
@@ -2130,7 +2130,7 @@ function renderInboxReviewItems(){
         </div>
         <div style="font-size:13px;font-weight:600;color:var(--success);white-space:nowrap">${item.totalCost?'$'+parseFloat(item.totalCost).toLocaleString('en-US',{minimumFractionDigits:2}):'—'}</div>
         ${isImported?`<span style="font-size:10px;background:var(--success-bg);color:var(--success);border-radius:20px;padding:2px 8px;font-weight:600;white-space:nowrap">✓ Confirmed</span>`:''}
-        <button onclick="toggleInboxItem(${globalIdx})" id="inbx-toggle-${globalIdx}" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:15px;padding:2px 6px">
+        <button onclick="toggleInboxItem(${rowKey})" id="inbx-toggle-${rowKey}" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:15px;padding:2px 6px">
           <i class="ti ti-${item._included&&!item._imported?'eye':'eye-off'}"></i>
         </button>
       </div>
@@ -2142,33 +2142,33 @@ function renderInboxReviewItems(){
         <div style="grid-column:1/-1">
           <div style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:3px">Site location (optional)</div>
           <input type="text" placeholder="e.g. Bay 3, Rack A" style="width:100%;padding:8px 10px;font-size:13px;border:1px solid var(--border2);border-radius:var(--radius);background:var(--surface2);color:var(--text);font-family:var(--font)"
-            oninput="inboxItems[${globalIdx}]._location=this.value" value="${item._location||''}">
+            oninput="setInboxItemByRowKey(${rowKey},'_location',this.value)" value="${item._location||''}">
         </div>
         <div>
           <div style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:3px">Fuel surcharge ($)</div>
-          <input type="number" id="inbx-fuel-${globalIdx}" placeholder="0.00" step="0.01" ${isImported?'disabled':''}
+          <input type="number" id="inbx-fuel-${rowKey}" placeholder="0.00" step="0.01" ${isImported?'disabled':''}
             style="width:100%;padding:8px 10px;font-size:13px;border:1px solid var(--border2);border-radius:var(--radius);background:var(--surface2);color:var(--text);font-family:var(--font)"
-            oninput="inboxItems[${globalIdx}]._fuelSurcharge=parseFloat(this.value)||0;updateInboxAdjCost(${globalIdx})" value="${(item._fuelSurcharge||0).toFixed(2)}">
+            oninput="setInboxItemByRowKey(${rowKey},'_fuelSurcharge',parseFloat(this.value)||0);updateInboxAdjCost(${rowKey})" value="${(item._fuelSurcharge||0).toFixed(2)}">
         </div>
         <div>
           <div style="font-size:10px;font-weight:600;color:var(--accent);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:3px">Adjusted cost/lb</div>
-          <div id="inbx-adj-${globalIdx}" style="font-size:14px;font-weight:600;color:var(--accent);padding:8px 0">
+          <div id="inbx-adj-${rowKey}" style="font-size:14px;font-weight:600;color:var(--accent);padding:8px 0">
             ${item.weightLbs&&item.totalCost?'$'+(((parseFloat(item.totalCost)||0)+(parseFloat(item._fuelSurcharge)||0))/item.weightLbs).toFixed(4):'—'}
           </div>
         </div>
         <div style="grid-column:1/-1">
           <div style="font-size:10px;font-weight:600;color:var(--accent);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:5px">Project / Stock <span style="color:var(--accent)">*</span></div>
-          <select id="inbx-proj-${globalIdx}" onchange="onInboxProjSel(${globalIdx},this.value)"
+          <select id="inbx-proj-${rowKey}" onchange="onInboxProjSelByRowKey(${rowKey},this.value)"
             style="width:100%;padding:8px 10px;font-size:13px;border:1px solid var(--accent-dim);border-radius:var(--radius);background:var(--surface2);color:var(--text);font-family:var(--font);margin-bottom:6px">
             <option value="">— select project or stock —</option>
             <option value="STOCK">📦 STOCK</option>
             ${projects.map(p=>`<option value="${p}" ${item._project===p?'selected':''}>${p}</option>`).join('')}
             <option value="__new__">+ Add new project…</option>
           </select>
-          <div id="inbx-proj-new-${globalIdx}" style="display:none">
-            <input type="text" placeholder="Type new project name" id="inbx-proj-newval-${globalIdx}"
+          <div id="inbx-proj-new-${rowKey}" style="display:none">
+            <input type="text" placeholder="Type new project name" id="inbx-proj-newval-${rowKey}"
               style="width:100%;padding:8px 10px;font-size:13px;border:1px solid var(--accent-dim);border-radius:var(--radius);background:var(--accent-bg);color:var(--text);font-family:var(--font)"
-              oninput="inboxItems[${globalIdx}]._project=this.value">
+              oninput="setInboxItemByRowKey(${rowKey},'_project',this.value);validateInboxCompleteness()">
           </div>
         </div>
         ${item.remarks?`<div style="grid-column:1/-1;font-size:11px;color:var(--text3);background:var(--surface3);border-radius:6px;padding:6px 8px">${item.remarks}</div>`:''}
@@ -2223,6 +2223,33 @@ function toggleInboxItem(i){
   updateInboxSummary();
 }
 
+function getInboxItemByRowKey(rowKey){
+  return inboxItems.find(i=>i._rowIdx===rowKey)||null;
+}
+
+function setInboxItemByRowKey(rowKey,field,val){
+  const item=getInboxItemByRowKey(rowKey);
+  if(item) item[field]=val;
+  // Also update in currentInboxGroup.items if present
+  if(currentInboxGroup){
+    const gi=currentInboxGroup.items.find(i=>i._rowIdx===rowKey);
+    if(gi) gi[field]=val;
+  }
+}
+
+function onInboxProjSelByRowKey(rowKey,val){
+  const nd=document.getElementById('inbx-proj-new-'+rowKey);
+  if(val==='__new__'){
+    nd.style.display='block';
+    setInboxItemByRowKey(rowKey,'_project','');
+    document.getElementById('inbx-proj-newval-'+rowKey)?.focus();
+  } else {
+    nd.style.display='none';
+    setInboxItemByRowKey(rowKey,'_project',val);
+  }
+  validateInboxCompleteness();
+}
+
 function onInboxProjSel(i,val){
   const nd=document.getElementById('inbx-proj-new-'+i);
   if(val==='__new__'){
@@ -2233,27 +2260,30 @@ function onInboxProjSel(i,val){
     nd.style.display='none';
     if(inboxItems[i]) inboxItems[i]._project=val;
   }
-  // Atomic workflow: validate that ALL items now have projects
   validateInboxCompleteness();
 }
 
 function validateInboxCompleteness(){
-  // ATOMIC WORKFLOW: Check if all items in current group have projects assigned
-  // Read from data model (inboxItems) which is kept in sync by dropdown handlers
+  // ATOMIC WORKFLOW: Check items in current group using _rowIdx as stable key
   const groupItems=currentInboxGroup?currentInboxGroup.items:inboxItems;
   const included=groupItems.filter(i=>i._included&&!i._imported);
-  
   let unassigned=[];
+
   included.forEach(item=>{
-    // Check the actual data model value
-    if(!item._project || !item._project.trim()){
-      unassigned.push(item);
+    // Read from dropdown using _rowIdx — stable across copies
+    const sel=document.getElementById('inbx-proj-'+item._rowIdx);
+    const val=sel?sel.value.trim():(item._project||'').trim();
+    if(!val) unassigned.push(item);
+    else{
+      // Keep data model in sync
+      item._project=val;
+      const master=inboxItems.find(i=>i._rowIdx===item._rowIdx);
+      if(master) master._project=val;
     }
   });
-  
+
   const btn=document.getElementById('inbox-commit-btn');
   const errDiv=document.getElementById('inbox-review-error');
-  
   if(unassigned.length>0){
     btn.disabled=true;
     btn.style.opacity='0.5';
@@ -2263,7 +2293,7 @@ function validateInboxCompleteness(){
     errDiv.style.borderColor='var(--warning)';
     errDiv.style.color='var(--warning)';
     errDiv.textContent=`⚠️ ${unassigned.length} item(s) still need a project: ${unassigned.map(u=>'•'+u.size).join(' ')}`;
-  } else if(included.length>0) {
+  } else if(included.length>0){
     btn.disabled=false;
     btn.style.opacity='1';
     btn.style.cursor='pointer';
@@ -2289,17 +2319,15 @@ async function commitInboxReview(){
   const included=groupItems.filter(i=>i._included&&!i._imported);
   if(!included.length){toast('No items included','danger');return;}
 
-  // SYNC PROJECT VALUES FROM DROPDOWNS BEFORE COMMIT
-  // This ensures we capture what user actually selected
+  // SYNC PROJECT VALUES FROM DROPDOWNS BEFORE COMMIT using _rowIdx as stable key
   included.forEach(item=>{
-    const globalIdx=inboxItems.indexOf(item);
-    if(globalIdx>=0){
-      const projSelect=document.getElementById('inbx-proj-'+globalIdx);
-      if(projSelect){
-        const newProjVal=projSelect.value.trim();
-        item._project=newProjVal; // Update the item reference we'll commit
-      }
+    const sel=document.getElementById('inbx-proj-'+item._rowIdx);
+    if(sel && sel.value.trim() && sel.value!=='__new__'){
+      item._project=sel.value.trim();
     }
+    // Also sync from master inboxItems array
+    const master=inboxItems.find(i=>i._rowIdx===item._rowIdx);
+    if(master && master._project) item._project=master._project;
   });
 
   // ATOMIC MODEL: ALL items must be assigned, or nothing commits
