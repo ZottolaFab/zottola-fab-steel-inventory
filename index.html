@@ -878,8 +878,10 @@ async function readTabViaScript(tab){
     const text=await r.text();
     const result=JSON.parse(text);
     if(!result.success||!result.rows){console.error('readTabViaScript failed:',tab,result);return null;}
-    console.log('readTabViaScript',tab,'rows:',result.rows.length);
-    return result.rows.filter(r=>r&&r[0]&&r[0]!=='');
+    console.log('readTabViaScript',tab,'rows:',result.rows.length,'first:',JSON.stringify(result.rows[0]));
+    const filtered=result.rows.filter(r=>r&&r[0]&&r[0]!=='');
+    console.log('readTabViaScript filtered rows:',filtered.length);
+    return filtered;
   }catch(e){
     console.error('readTabViaScript error:',tab,e.message);
     return null;
