@@ -873,10 +873,12 @@ async function readTabViaScript(tab){
   // Reads a sheet tab via Apps Script GET — bypasses GViz cache entirely
   try{
     const url=APPS_SCRIPT_URL+'?action=readSheet&tab='+encodeURIComponent(tab)+'&_='+Date.now();
-    const r=await fetch(url,{method:'GET',redirect:'follow',credentials:'omit'});
+    const r=await fetch(url,{method:'GET',redirect:'follow',credentials:'omit',mode:'cors'});
     if(!r.ok){console.error('readTabViaScript HTTP error:',tab,r.status);return null;}
     const text=await r.text();
-    const result=JSON.parse(text);
+    console.log('readTabViaScript raw response:',text.slice(0,200));
+    let result;
+    try{result=JSON.parse(text);}catch(pe){console.error('readTabViaScript JSON parse error:',pe.message,'text:',text.slice(0,100));return null;}
     if(!result.success||!result.rows){console.error('readTabViaScript failed:',tab,result);return null;}
     console.log('readTabViaScript',tab,'rows:',result.rows.length,'first:',JSON.stringify(result.rows[0]));
     const filtered=result.rows.filter(r=>r&&r[0]&&r[0]!=='');
