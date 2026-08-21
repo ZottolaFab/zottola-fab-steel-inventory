@@ -869,6 +869,23 @@ async function readTab(tab){
   return await readTabGViz(tab);
 }
 
+async function readTabViaScript(tab){
+  // Reads a sheet tab via Apps Script GET — bypasses GViz cache entirely
+  try{
+    const url=APPS_SCRIPT_URL+'?action=readSheet&tab='+encodeURIComponent(tab)+'&_='+Date.now();
+    const r=await fetch(url,{method:'GET',redirect:'follow',credentials:'omit'});
+    if(!r.ok){console.error('readTabViaScript HTTP error:',tab,r.status);return null;}
+    const text=await r.text();
+    const result=JSON.parse(text);
+    if(!result.success||!result.rows){console.error('readTabViaScript failed:',tab,result);return null;}
+    console.log('readTabViaScript',tab,'rows:',result.rows.length);
+    return result.rows.filter(r=>r&&r[0]&&r[0]!=='');
+  }catch(e){
+    console.error('readTabViaScript error:',tab,e.message);
+    return null;
+  }
+}
+
 async function readTabGViz(tab){
   try{
     const url=`https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent(tab)}&_=${Date.now()}`;
@@ -920,8 +937,8 @@ async function syncAll(manual=false){
         project:r[9]||'',remarks:r[10]||'',enteredBy:r[11]||''
       }));
     }
-    // Read inbox
-    const inboxRows=await readTab(TABS.inbox);
+    // Read inbox via Apps Script (bypasses GViz cache)
+    const inboxRows=await readTabViaScript(TABS.inbox);
     console.log('Inbox rows read:', inboxRows?inboxRows.length:'null');
     if(inboxRows!==null){
       // Strip header row — GViz returns it as data when parsedNumHeaders:0
