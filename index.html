@@ -1,4 +1,4 @@
-Hey what's going on<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -873,7 +873,13 @@ async function readTabViaScript(tab){
   // Reads a sheet tab via Apps Script GET — bypasses GViz cache entirely
   try{
     const url=APPS_SCRIPT_URL+'?action=readSheet&tab='+encodeURIComponent(tab)+'&_='+Date.now();
-    const r=await fetch(url,{method:'GET',redirect:'follow',credentials:'omit',mode:'cors'});
+    const r=await fetch(APPS_SCRIPT_URL,{
+      method:'POST',
+      redirect:'follow',
+      credentials:'omit',
+      headers:{'Content-Type':'text/plain'},
+      body:JSON.stringify({action:'readSheet',tab:tab})
+    });
     if(!r.ok){console.error('readTabViaScript HTTP error:',tab,r.status);return null;}
     const text=await r.text();
     console.log('readTabViaScript raw response:',text.slice(0,200));
@@ -2505,4 +2511,4 @@ startAutoSync();
 startProjSync();
 </script>
 </body>
-</html> I'm doing OK
+</html>
