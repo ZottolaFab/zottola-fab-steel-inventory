@@ -883,14 +883,10 @@ async function readTabViaScript(tab){
     });
     if(!r.ok){console.error('readTabViaScript HTTP error:',tab,r.status);return null;}
     const text=await r.text();
-    console.log('readTabViaScript raw response:',text.slice(0,200));
     let result;
     try{result=JSON.parse(text);}catch(pe){console.error('readTabViaScript JSON parse error:',pe.message,'text:',text.slice(0,100));return null;}
     if(!result.success||!result.rows){console.error('readTabViaScript failed:',tab,result);return null;}
-    console.log('readTabViaScript',tab,'rows:',result.rows.length,'first:',JSON.stringify(result.rows[0]));
-    const filtered=result.rows.filter(r=>r&&r[0]&&r[0]!=='');
-    console.log('readTabViaScript filtered rows:',filtered.length);
-    return filtered;
+    return result.rows.filter(r=>r&&r[0]&&r[0]!=='');
   }catch(e){
     console.error('readTabViaScript error:',tab,e.message);
     return null;
@@ -2350,34 +2346,26 @@ async function commitInboxReview(){
 
   // SYNC PROJECT VALUES FROM DROPDOWNS BEFORE COMMIT using _rowIdx as stable key
   // Priority: typed custom input > dropdown selection > master inboxItems array
-  console.log('=== COMMIT SYNC DEBUG ===');
-  console.log('included items:', included.length);
   included.forEach(item=>{
     const rowKey=item._rowIdx;
     // 1. Check typed custom input first
     const customInput=document.getElementById('inbx-proj-newval-'+rowKey);
     if(customInput && customInput.value.trim()){
       item._project=customInput.value.trim();
-      console.log('rowKey '+rowKey+' ['+item.size+']: custom input => '+item._project);
       return;
     }
     // 2. Check dropdown selection
     const sel=document.getElementById('inbx-proj-'+rowKey);
     if(sel && sel.value.trim() && sel.value!=='__new__'){
       item._project=sel.value.trim();
-      console.log('rowKey '+rowKey+' ['+item.size+']: dropdown => '+item._project);
       return;
     }
     // 3. Fall back to master inboxItems array
     const master=inboxItems.find(i=>i._rowIdx===rowKey);
     if(master && master._project && master._project.trim()){
       item._project=master._project.trim();
-      console.log('rowKey '+rowKey+' ['+item.size+']: master => '+item._project);
-      return;
     }
-    console.warn('rowKey '+rowKey+' ['+item.size+']: NO PROJECT — sel='+(sel?sel.value:'no-el')+' master='+(master?master._project:'no-master'));
   });
-  console.log('=== END SYNC DEBUG ===');
 
   // ATOMIC MODEL: ALL items must be assigned, or nothing commits
   const assigned=included.filter(i=>i._project.trim());
