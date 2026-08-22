@@ -1257,6 +1257,25 @@ async function saveItem(){
       setSyncUI('ok','');
       return;
     }
+    if(docType==='PO'){
+      // Route to PO Log instead of inventory
+      const newPO={
+        supplier:newItem.supplier,poNum:newItem.poNum||newItem.invoiceNum,
+        poDate:newItem.invoiceDate||new Date().toLocaleDateString('en-US'),
+        shape:newItem.shape,size:newItem.size,qty:newItem.qty,
+        lenFt:newItem.lenFt,lenIn:newItem.lenIn,weightLbs:newItem.totalWeight,
+        costPerLb:newItem.costPerLb,totalCost:newItem.totalCost,
+        grade:newItem.grade,heat:newItem.heatNumber,remarks:newItem.remarks,
+        status:'Open',project:newItem.projectOrStock,_fuelSurcharge:newItem.fuelSurcharge||0,
+        _rowIdx:poItems.length+2
+      };
+      poItems.push(newPO);
+      clearAddForm();toast('Added to PO Log','success');
+      await writePOToSheet();
+      await syncAll(false);
+      switchTab('import',document.querySelectorAll('.tab')[1]);
+      return;
+    }
     inventory.unshift(newItem);
     clearAddForm();toast('Added to inventory','success');
   }
