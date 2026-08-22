@@ -858,7 +858,7 @@ function calcAdjCostPerLb(i){
   const total=(parseFloat(i.totalCost)||0)+(parseFloat(i.fuelSurcharge)||0);
   return total&&i.totalWeight?(total/i.totalWeight).toFixed(4):'';
 }
-function invToRow(i){return[i.id,i.location,i.shape,i.size,i.wPerFt||'',i.qty,i.qtyRemaining,i.lenFt||'',i.lenIn||'',i.totalWeight||'',i.costPerLb||'',i.totalCost||'',i.fuelSurcharge||'',calcAdjCostPerLb(i),i.projectOrStock||'',i.docType||'',i.docType==='PO'?'On Order':'Received',i.supplier||'',i.invoiceNum||'',i.poNum||'',i.invoiceDate||'',i.grade||'',i.heatNumber||'',i.remarks||'',i.added,i.edited||''];}
+function invToRow(i){const adjTotal=Math.round(((parseFloat(i.totalCost)||0)+(parseFloat(i.fuelSurcharge)||0))*100)/100;return[i.id,i.location,i.shape,i.size,i.wPerFt||'',i.qty,i.qtyRemaining,i.lenFt||'',i.lenIn||'',i.totalWeight||'',i.costPerLb||'',adjTotal||'',i.fuelSurcharge||'',calcAdjCostPerLb(i),i.projectOrStock||'',i.docType||'',i.docType==='PO'?'On Order':'Received',i.supplier||'',i.invoiceNum||'',i.poNum||'',i.invoiceDate||'',i.grade||'',i.heatNumber||'',i.remarks||'',i.added,i.edited||''];}
 function rowToInv(r){return{id:r[0],location:r[1],shape:r[2],size:r[3],wPerFt:r[4]?parseFloat(r[4]):null,qty:parseInt(r[5])||0,qtyRemaining:parseInt(r[6])||0,lenFt:r[7]?parseFloat(r[7]):null,lenIn:r[8]?parseFloat(r[8]):null,totalWeight:r[9]?parseFloat(r[9]):null,costPerLb:r[10]||null,totalCost:r[11]?parseFloat(r[11]):null,fuelSurcharge:r[12]?parseFloat(r[12]):null,adjCostPerLb:r[13]||null,projectOrStock:r[14]||'',docType:r[15]||'',status:r[16]||'',supplier:r[17]||'',invoiceNum:r[18]||'',poNum:r[19]||'',invoiceDate:r[20]||'',grade:r[21]||'',heatNumber:r[22]||'',remarks:r[23]||'',added:r[24]||new Date().toISOString(),edited:r[25]||''};}
 function logToRow(e){const d=new Date(e.time);return[e.id,d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}),d.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'}),e.job||'',e.shape,e.size||'',e.location,e.qtyUsed,e.qtyRemaining,fmtLen(e.lenFt,e.lenIn),e.remarks||''];}
 function locToRow(l){return[l.id,l.name,l.desc||''];}
@@ -2367,9 +2367,11 @@ async function commitInboxReview(){
     }
   });
 
-  // ATOMIC MODEL: ALL items must be assigned, or nothing commits
-  const assigned=included.filter(i=>i._project.trim());
-  const unassigned=included.filter(i=>!i._project.trim());
+  // ATOMIC MODEL: ALL material items must be assigned (freight rows exempt)
+  const isFreightRow=i=>!i.shape||i.shape.toString().trim()===''||
+    (i.docType&&i.docType.toString().toLowerCase()==='freight');
+  const assigned=included.filter(i=>i._project.trim()||isFreightRow(i));
+  const unassigned=included.filter(i=>!i._project.trim()&&!isFreightRow(i));
 
   if(unassigned.length>0){
     document.getElementById('inbox-review-error').style.display='block';
@@ -2386,7 +2388,23 @@ async function commitInboxReview(){
   document.getElementById('inbox-commit-btn').textContent='Saving…';
   document.getElementById('inbox-commit-btn').disabled=true;
 
-  const newEntries=assigned.map(item=>({
+  // Separate freight/surcharge rows from material rows
+  const isFreight=item=>!item.shape||item.shape.toString().trim()===''||
+    (item.docType&&item.docType.toString().toLowerCase()==='freight');
+  const freightItems=assigned.filter(isFreight);
+  const materialItems=assigned.filter(i=>!isFreight(i));
+
+  // Sum total fuel surcharge from freight rows + per-item surcharges
+  const totalFreightSurcharge=freightItems.reduce((s,i)=>s+(parseFloat(i._fuelSurcharge)||0)+(parseFloat(i.totalCost)||0),0);
+  const totalMaterialWeight=materialItems.reduce((s,i)=>s+(parseFloat(i.weightLbs)||0),0);
+
+  const newEntries=materialItems.map(item=>{
+    // Distribute freight proportionally by weight
+    const itemWeight=parseFloat(item.weightLbs)||0;
+    const itemSurcharge=parseFloat(item._fuelSurcharge)||0;
+    const freightShare=totalMaterialWeight>0?(itemWeight/totalMaterialWeight)*totalFreightSurcharge:0;
+    const totalFuel=Math.round((itemSurcharge+freightShare)*100)/100;
+    return {
     id:Date.now().toString()+Math.random().toString(36).slice(2,5),
     location:item._location||'',
     shape:item.shape,
@@ -2399,7 +2417,7 @@ async function commitInboxReview(){
     totalWeight:item.weightLbs||null,
     costPerLb:item.costPerLb||null,
     totalCost:item.totalCost||null,
-    fuelSurcharge:item._fuelSurcharge||0,
+    fuelSurcharge:totalFuel||0,
     projectOrStock:item._project.trim().toUpperCase()==='STOCK'?'STOCK':item._project.trim(),
     docType:item.docType||'Invoice',
     supplier:item.supplier,
@@ -2417,7 +2435,7 @@ async function commitInboxReview(){
       item.poNum?'PO: '+item.poNum:''
     ].filter(Boolean).join(' · '),
     added:new Date().toISOString()
-  }));
+  };});
 
   // Check for duplicates — warn but don't block
   const dupes=findDuplicates(newEntries);
