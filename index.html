@@ -2222,6 +2222,8 @@ function reviewInbox(){
 
 function renderInboxReviewItems(){
   const groupItems=currentInboxGroup?currentInboxGroup.items:inboxItems;
+  // Ensure projects are loaded before rendering dropdowns
+  if(!projects||!projects.length) loadProjects(false);
   // Force _project from sheet data for pre-populated items
   groupItems.forEach(item=>{
     if(!item._project&&item.project) item._project=item.project;
