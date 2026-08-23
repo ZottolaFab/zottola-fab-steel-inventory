@@ -2554,9 +2554,17 @@ async function commitInboxReview(){
 
   // Write inventory entries
   if(invEntries.length){
-    console.log('INV WRITE: attempting to write',invEntries.length,'entries to inventory');
+    console.log('INV WRITE: attempting to write',invEntries.length,'entries to inventory. Current inventory:',inventory.length,'rows');
+    // Read fresh inventory from sheet BEFORE adding new entries to avoid overwrite
+    const freshInvRows=await readTabViaScript(TABS.inv);
+    if(freshInvRows&&freshInvRows.length){
+      const freshInv=freshInvRows.filter(r=>r&&r[0]&&r[0]!=='ID').map(rowToInv);
+      console.log('INV WRITE: fresh inventory from sheet has',freshInv.length,'rows');
+      // Merge: fresh rows first, new entries on top
+      inventory=freshInv;
+    }
     invEntries.forEach(e=>inventory.unshift(e));
-    console.log('INV WRITE: inventory now has',inventory.length,'total rows');
+    console.log('INV WRITE: inventory now has',inventory.length,'total rows after merge');
     const result = await writeInventoryToSheet();
     console.log('INV WRITE: result=',JSON.stringify(result));
     if(!result||!result.success){
