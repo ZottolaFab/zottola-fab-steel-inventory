@@ -960,7 +960,7 @@ async function syncAll(manual=false){
       // Strip header row — GViz returns it as data when parsedNumHeaders:0
       const inboxDataRows=inboxRows.filter(r=>r[0]&&r[0]!=='Supplier');
       console.log('Inbox statuses:', inboxDataRows.map(r=>r[16]));
-      inboxItems=inboxDataRows.filter(r=>r&&r[0]&&(!r[16]||r[16].toString().trim().toLowerCase()!=='imported')&&(r[6]||r[4])&&!confirmedInboxInvoices.has((r[1]||'').trim())).map((r,i)=>{
+      inboxItems=inboxDataRows.filter(r=>r&&r[0]&&(!r[16]||r[16].toString().trim().toLowerCase()!=='imported')&&(r[6]||r[4])&&!confirmedInboxInvoices.has((r[1]||r[2]||'').trim())).map((r,i)=>{
         // Row index in sheet: header=row1, data starts row2
         // inboxDataRows index is 0-based, so sheet row = index+2
         const actualRowIdx=inboxDataRows.indexOf(r)+2; // +1 for header row, +1 for 1-based
@@ -2089,7 +2089,7 @@ function groupInboxByInvoice(){
   // Group inboxItems by supplier+invoiceNum
   const groups={};
   inboxItems.forEach(item=>{
-    const key=(item.supplier||'')+'||'+(item.invoiceNum||'');
+    const key=(item.supplier||'')+'||'+(item.invoiceNum||item.poNum||'');
     if(!groups[key]){
       groups[key]={
         supplier:item.supplier,
@@ -2627,7 +2627,7 @@ async function commitInboxReview(){
   // ATOMIC MODEL: All items were assigned, so entire invoice is confirmed
   const confirmedRowIndices=new Set(allIndices);
   inboxItems=inboxItems.filter(i=>!confirmedRowIndices.has(i._rowIdx));
-  confirmedInboxInvoices.add(invoiceNum); // Block GViz cache from restoring this invoice
+  confirmedInboxInvoices.add(invoiceNum||currentInboxGroup?.poNum||''); // Block GViz cache from restoring this invoice
 
   // In atomic model, invoice is fully done — no remaining items
   currentInboxGroup=null;
