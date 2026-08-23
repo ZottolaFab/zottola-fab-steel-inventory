@@ -2251,6 +2251,14 @@ async function markPOReceived(groupIdx){
 let currentInboxGroup=null;
 const confirmedInboxRows=new Set(); // track rows confirmed this session — prevent GViz cache from restoring them
 
+function setPOCloseOnConfirm(doClose){
+  window._closePOOnConfirm=doClose?(window._matchedPONums&&window._matchedPONums[0]?window._matchedPONums[0]:null):null;
+  const yes=document.getElementById('po-close-yes');
+  const no=document.getElementById('po-close-no');
+  if(yes) yes.style.cssText='padding:4px 12px;border-radius:20px;border:1px solid #60a5fa;background:'+(doClose?'#60a5fa':'transparent')+';color:'+(doClose?'#000':'#60a5fa')+';font-size:11px;cursor:pointer';
+  if(no) no.style.cssText='padding:4px 12px;border-radius:20px;border:1px solid var(--border2);background:'+(!doClose?'var(--surface3)':'transparent')+';color:var(--text);font-size:11px;cursor:pointer';
+}
+
 function reviewInboxGroup(groupIdx){
   const groups=groupInboxByInvoice().filter(g=>g.pendingCount>0);
   currentInboxGroup=groups[groupIdx];
@@ -2299,19 +2307,19 @@ function renderInboxReviewItems(){
         const poBanner=document.createElement('div');
         poBanner.style.cssText='background:rgba(96,165,250,0.1);border:1px solid rgba(96,165,250,0.4);border-radius:10px;padding:10px 12px;margin-bottom:4px';
         if(matchingPOs.length===1){
-          poBanner.innerHTML='<div style="font-size:12px;color:#60a5fa;font-weight:600"><i class="ti ti-clipboard-list"></i> Open PO from '+g.supplier+' — PO# '+matchingPOs[0]+'</div>'+
+          const poN=matchingPOs[0];
+          window._closePOOnConfirm=poN; // default to Yes
+          poBanner.innerHTML='<div style="font-size:12px;color:#60a5fa;font-weight:600"><i class="ti ti-clipboard-list"></i> Open PO from '+g.supplier+' — PO# '+poN+'</div>'+
             '<div style="font-size:11px;color:var(--text3);margin-top:4px">Close this PO when invoice is confirmed?</div>'+
             '<div style="display:flex;gap:8px;margin-top:8px">'+
-            '<button onclick="window._closePOOnConfirm=''+matchingPOs[0]+'';this.style.background='#60a5fa';this.style.color='#000';this.nextElementSibling.style.background='';this.nextElementSibling.style.color=''" '+
-            'style="padding:4px 12px;border-radius:20px;border:1px solid #60a5fa;background:#60a5fa;color:#000;font-size:11px;cursor:pointer">Yes — close PO# '+matchingPOs[0]+'</button>'+
-            '<button onclick="window._closePOOnConfirm=null;this.style.background='var(--surface3)';this.style.color='var(--text)';this.previousElementSibling.style.background='';this.previousElementSibling.style.color='#60a5fa'" '+
-            'style="padding:4px 12px;border-radius:20px;border:1px solid var(--border2);font-size:11px;cursor:pointer">No</button>'+
+            '<button id="po-close-yes" onclick="setPOCloseOnConfirm(true)" style="padding:4px 12px;border-radius:20px;border:1px solid #60a5fa;background:#60a5fa;color:#000;font-size:11px;cursor:pointer">Yes — close PO# '+poN+'</button>'+
+            '<button id="po-close-no" onclick="setPOCloseOnConfirm(false)" style="padding:4px 12px;border-radius:20px;border:1px solid var(--border2);font-size:11px;cursor:pointer">No</button>'+
             '</div>';
         } else {
           poBanner.innerHTML='<div style="font-size:12px;color:#60a5fa;font-weight:600"><i class="ti ti-clipboard-list"></i> '+matchingPOs.length+' open POs from '+g.supplier+'</div>'+
             '<div style="font-size:11px;color:var(--text3);margin-top:4px">Close a PO when confirmed?</div>'+
             '<select onchange="window._closePOOnConfirm=this.value||null" style="margin-top:6px;width:100%;padding:6px;border-radius:6px;border:1px solid rgba(96,165,250,0.4);background:var(--surface2);color:var(--text);font-size:12px">'+
-            '<option value="">— No, don't close a PO —</option>'+
+            '<option value="">— No, skip closing a PO —</option>'+
             matchingPOs.map(p=>'<option value="'+p+'">Close PO# '+p+'</option>').join('')+
             '</select>';
         }
