@@ -926,8 +926,8 @@ async function syncAll(manual=false){
   if(manual) setSyncUI('syncing','syncing…');
   try{
     // Read inventory — filter out header row (GViz returns it as data when parsedNumHeaders:0)
-    const invRows=await readTab(TABS.inv);
-    // Only update inventory from GViz if we haven't written recently (60s guard)
+    // Read inventory via Apps Script — bypasses GViz cache entirely
+    const invRows=await readTabViaScript(TABS.inv);
     if(invRows!==null && (Date.now()-lastInventoryWrite)>300000) inventory=invRows.filter(r=>r&&r[0]&&r[0]!=='ID').map(rowToInv);
 
     // Read usage log
