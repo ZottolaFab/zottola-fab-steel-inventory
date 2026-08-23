@@ -2554,8 +2554,11 @@ async function commitInboxReview(){
 
   // Write inventory entries
   if(invEntries.length){
+    console.log('INV WRITE: attempting to write',invEntries.length,'entries to inventory');
     invEntries.forEach(e=>inventory.unshift(e));
+    console.log('INV WRITE: inventory now has',inventory.length,'total rows');
     const result = await writeInventoryToSheet();
+    console.log('INV WRITE: result=',JSON.stringify(result));
     if(!result||!result.success){
       invEntries.forEach(e=>{const idx=inventory.indexOf(e);if(idx>-1)inventory.splice(idx,1);});
       toast('Inventory write failed — check connection','danger',8000);
@@ -2565,6 +2568,9 @@ async function commitInboxReview(){
       document.getElementById('inbox-commit-btn').style.opacity='0.5';
       return;
     }
+    console.log('INV WRITE: success — inventory written');
+  } else {
+    console.warn('INV WRITE: no invEntries — all items routed as PO or freight?');
   }
 
   // Write PO entries to PO Log
