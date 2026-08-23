@@ -803,6 +803,7 @@ let pendingUseItemId=null,npField=null,npVal='',clearBackupDL=false;
 let kbShift=false,kbNum=false,kbText='';
 let syncTimer=null,projTimer=null,siIdx=-1;
 let confirmedInboxInvoices=new Set(); // invoiceNums confirmed this session — GViz cache guard
+let lastInventoryWrite=0; // timestamp of last inventory write — blocks GViz cache overwrite
 let sheetsReady=false;
 
 // ── PERSIST (local cache only) ───────────────────────────────────────
@@ -926,7 +927,8 @@ async function syncAll(manual=false){
   try{
     // Read inventory — filter out header row (GViz returns it as data when parsedNumHeaders:0)
     const invRows=await readTab(TABS.inv);
-    if(invRows!==null) inventory=invRows.filter(r=>r&&r[0]&&r[0]!=='ID').map(rowToInv);
+    // Only update inventory from GViz if we haven't written recently (60s guard)
+    if(invRows!==null && (Date.now()-lastInventoryWrite)>60000) inventory=invRows.filter(r=>r&&r[0]&&r[0]!=='ID').map(rowToInv);
 
     // Read usage log
     const logRows=await readTab(TABS.log);
@@ -1100,6 +1102,7 @@ function findDuplicates(newEntries){
 }
 
 async function writeInventoryToSheet(){
+  lastInventoryWrite=Date.now();
   const rows=[INV_HEADER,...inventory.map(invToRow)];
   return await scriptWrite('writeSheet', {tab: TABS.inv, rows});
 }
@@ -2580,9 +2583,14 @@ async function commitInboxReview(){
   }
 
   // Mark ALL rows for this invoice as Imported (atomic commit)
+  // Include freight rows — they get marked Imported too, project stays empty
   const allIndices=included.map(i=>i._rowIdx);
   const projectMap={};
-  included.forEach(i=>{projectMap[i._rowIdx]=i._project;});
+  included.forEach(i=>{
+    // For freight rows, use the first material item's project
+    const proj=i._project||(assigned.find(a=>a._project)?assigned.find(a=>a._project)._project:'');
+    projectMap[i._rowIdx]=proj;
+  });
   await updateInboxStatus(allIndices,projectMap);
 
   document.getElementById('inbox-commit-btn').textContent='Confirm all & add to inventory';
