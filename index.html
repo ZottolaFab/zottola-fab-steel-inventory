@@ -2290,6 +2290,40 @@ function renderInboxReviewItems(){
     hdr.innerHTML=`<div style="font-size:14px;font-weight:600">${g.supplier} — ${g.invoiceNum}</div>
       <div style="font-size:11px;color:var(--text3);margin-top:3px">${g.invoiceDate}${g.poNum?' · <span style="color:#fff;font-weight:700">PO# '+g.poNum+'</span>':''} · ${g.items.length} total items · $${g.totalCost.toLocaleString('en-US',{minimumFractionDigits:2})}</div>`;
     list.appendChild(hdr);
+    // Check for matching open PO from same supplier
+    if(g.docType!=='PO'&&poItems&&poItems.length){
+      const matchingPOs=[...new Set(poItems.filter(p=>p.supplier===g.supplier).map(p=>p.poNum))];
+      if(matchingPOs.length){
+        window._matchedPONums=matchingPOs;
+        window._closePOOnConfirm=matchingPOs.length===1?matchingPOs[0]:null;
+        const poBanner=document.createElement('div');
+        poBanner.style.cssText='background:rgba(96,165,250,0.1);border:1px solid rgba(96,165,250,0.4);border-radius:10px;padding:10px 12px;margin-bottom:4px';
+        if(matchingPOs.length===1){
+          poBanner.innerHTML='<div style="font-size:12px;color:#60a5fa;font-weight:600"><i class="ti ti-clipboard-list"></i> Open PO from '+g.supplier+' — PO# '+matchingPOs[0]+'</div>'+
+            '<div style="font-size:11px;color:var(--text3);margin-top:4px">Close this PO when invoice is confirmed?</div>'+
+            '<div style="display:flex;gap:8px;margin-top:8px">'+
+            '<button onclick="window._closePOOnConfirm=''+matchingPOs[0]+'';this.style.background='#60a5fa';this.style.color='#000';this.nextElementSibling.style.background='';this.nextElementSibling.style.color=''" '+
+            'style="padding:4px 12px;border-radius:20px;border:1px solid #60a5fa;background:#60a5fa;color:#000;font-size:11px;cursor:pointer">Yes — close PO# '+matchingPOs[0]+'</button>'+
+            '<button onclick="window._closePOOnConfirm=null;this.style.background='var(--surface3)';this.style.color='var(--text)';this.previousElementSibling.style.background='';this.previousElementSibling.style.color='#60a5fa'" '+
+            'style="padding:4px 12px;border-radius:20px;border:1px solid var(--border2);font-size:11px;cursor:pointer">No</button>'+
+            '</div>';
+        } else {
+          poBanner.innerHTML='<div style="font-size:12px;color:#60a5fa;font-weight:600"><i class="ti ti-clipboard-list"></i> '+matchingPOs.length+' open POs from '+g.supplier+'</div>'+
+            '<div style="font-size:11px;color:var(--text3);margin-top:4px">Close a PO when confirmed?</div>'+
+            '<select onchange="window._closePOOnConfirm=this.value||null" style="margin-top:6px;width:100%;padding:6px;border-radius:6px;border:1px solid rgba(96,165,250,0.4);background:var(--surface2);color:var(--text);font-size:12px">'+
+            '<option value="">— No, don't close a PO —</option>'+
+            matchingPOs.map(p=>'<option value="'+p+'">Close PO# '+p+'</option>').join('')+
+            '</select>';
+        }
+        list.appendChild(poBanner);
+      } else {
+        window._closePOOnConfirm=null;
+        window._matchedPONums=[];
+      }
+    } else {
+      window._closePOOnConfirm=null;
+      window._matchedPONums=[];
+    }
   }
   groupItems.forEach((item,i)=>{
     const rowKey=item._rowIdx; // Use _rowIdx as unique stable key — not indexOf (which fails for group copies)
@@ -2701,8 +2735,18 @@ async function commitInboxReview(){
   renderImportSelector();
   renderInboxSection();
   
-  const isAllPO=invEntries.length===0&&poEntries.length>0;
-  toast(`✅ ${isAllPO?'PO':'Invoice'} ${invoiceNum} confirmed · ${confirmedCount} items added to ${isAllPO?'PO Log':'inventory'}`,'success');
+  // Close matched PO if user selected one
+  if(window._closePOOnConfirm){
+    const poNumToClose=window._closePOOnConfirm;
+    poItems=poItems.filter(i=>i.poNum!==poNumToClose);
+    await writePOToSheet();
+    renderPoSection();
+    window._closePOOnConfirm=null;
+    toast('✅ Invoice confirmed & PO# '+poNumToClose+' closed','success');
+  } else {
+    const isAllPO=invEntries.length===0&&poEntries.length>0;
+    toast('✅ '+(isAllPO?'PO':'Invoice')+' '+invoiceNum+' confirmed · '+confirmedCount+' items added to '+(isAllPO?'PO Log':'inventory'),'success');
+  }
   // Note: no background sync — GViz cache would restore confirmed items
   // Items removed from inboxItems in memory; sheet already updated correctly
 }
