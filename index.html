@@ -928,7 +928,7 @@ async function syncAll(manual=false){
     // Read inventory — filter out header row (GViz returns it as data when parsedNumHeaders:0)
     const invRows=await readTab(TABS.inv);
     // Only update inventory from GViz if we haven't written recently (60s guard)
-    if(invRows!==null && (Date.now()-lastInventoryWrite)>60000) inventory=invRows.filter(r=>r&&r[0]&&r[0]!=='ID').map(rowToInv);
+    if(invRows!==null && (Date.now()-lastInventoryWrite)>300000) inventory=invRows.filter(r=>r&&r[0]&&r[0]!=='ID').map(rowToInv);
 
     // Read usage log
     const logRows=await readTab(TABS.log);
@@ -2569,6 +2569,9 @@ async function commitInboxReview(){
       return;
     }
     console.log('INV WRITE: success — inventory written');
+    // Reset sync timer so GViz doesn't overwrite immediately
+    if(syncTimer) clearInterval(syncTimer);
+    syncTimer=setInterval(()=>syncAll(false),SYNC_INTERVAL);
   } else {
     console.warn('INV WRITE: no invEntries — all items routed as PO or freight?');
   }
