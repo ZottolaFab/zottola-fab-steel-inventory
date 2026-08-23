@@ -1381,6 +1381,7 @@ async function confirmUse(){
   const use=parseInt(document.getElementById('modal-use-qty').value)||0;
   const job=document.getElementById('modal-job').value;
   const rem=document.getElementById('modal-use-remarks').value.trim();
+  if(!job){toast('Select a project before confirming','danger');return;}
   if(use<1){toast('Enter qty to deduct','danger');return;}
   // Re-read from sheet to check for conflicts
   const liveRows=await readTab(TABS.inv);
