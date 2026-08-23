@@ -2227,6 +2227,10 @@ function renderInboxReviewItems(){
     if(!item._project&&item.project) item._project=item.project;
   });
   document.getElementById('inbox-review-count').textContent=groupItems.length+' items';
+  // Update commit button label based on doc type
+  const isPOReview=currentInboxGroup&&currentInboxGroup.docType==='PO';
+  const commitBtn=document.getElementById('inbox-commit-btn');
+  if(commitBtn) commitBtn.innerHTML='<i class="ti ti-'+(isPOReview?'clipboard-list':'database-import')+'"></i> Confirm all &amp; add to '+(isPOReview?'PO Log':'inventory');
   const list=document.getElementById('inbox-review-items');
   list.innerHTML='';
   // Show group header
@@ -2630,7 +2634,8 @@ async function commitInboxReview(){
   renderImportSelector();
   renderInboxSection();
   
-  toast(`✅ Invoice ${invoiceNum} confirmed · ${confirmedCount} items added to inventory`,'success');
+  const isAllPO=invEntries.length===0&&poEntries.length>0;
+  toast(`✅ ${isAllPO?'PO':'Invoice'} ${invoiceNum} confirmed · ${confirmedCount} items added to ${isAllPO?'PO Log':'inventory'}`,'success');
   // Note: no background sync — GViz cache would restore confirmed items
   // Items removed from inboxItems in memory; sheet already updated correctly
 }
