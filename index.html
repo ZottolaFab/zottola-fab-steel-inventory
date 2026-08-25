@@ -2651,7 +2651,7 @@ async function commitInboxReview(){
   }
 
   // Split entries: POs go to PO Log, Invoices go to Inventory
-  console.log('SPLIT: newEntries doctypes=',newEntries.map(e=>e.size+':'+e.docType).join(', '));
+  console.log('SPLIT: newEntries length=',newEntries.length,'doctypes=',newEntries.map(e=>e?e.size+':'+e.docType:'undefined').join(', '));
   const poEntries=newEntries.filter(e=>e.docType==='PO');
   const invEntries=newEntries.filter(e=>e.docType!=='PO');
   console.log('SPLIT: invEntries=',invEntries.length,'poEntries=',poEntries.length);
