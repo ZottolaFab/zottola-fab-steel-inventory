@@ -2591,6 +2591,8 @@ async function commitInboxReview(){
     (item.docType&&item.docType.toString().toLowerCase()==='freight');
   const freightItems=assigned.filter(isFreight);
   const materialItems=assigned.filter(i=>!isFreight(i));
+  console.log('FREIGHT CHECK: included=',included.length,'assigned=',assigned.length,'freight=',freightItems.length,'material=',materialItems.length);
+  if(assigned.length) console.log('FREIGHT CHECK: first assigned item shape=',assigned[0].shape,'docType=',assigned[0].docType,'_project=',assigned[0]._project);
 
   // Sum total fuel surcharge from freight rows + per-item surcharges
   const totalFreightSurcharge=freightItems.reduce((s,i)=>s+(parseFloat(i._fuelSurcharge)||0)+(parseFloat(i.totalCost)||0),0);
