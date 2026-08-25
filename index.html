@@ -2657,11 +2657,13 @@ async function commitInboxReview(){
     console.log('INV WRITE: attempting to write',invEntries.length,'entries to inventory. Current inventory:',inventory.length,'rows');
     // Read fresh inventory from sheet BEFORE adding new entries to avoid overwrite
     const freshInvRows=await readTabViaScript(TABS.inv);
+    console.log('INV WRITE: freshInvRows=',freshInvRows?freshInvRows.length+' rows':'null/empty');
     if(freshInvRows&&freshInvRows.length){
       const freshInv=freshInvRows.filter(r=>r&&r[0]&&r[0]!=='ID').map(rowToInv);
       console.log('INV WRITE: fresh inventory from sheet has',freshInv.length,'rows');
-      // Merge: fresh rows first, new entries on top
       inventory=freshInv;
+    } else {
+      console.warn('INV WRITE: fresh read null/empty — will overwrite with in-memory',inventory.length,'rows');
     }
     invEntries.forEach(e=>inventory.unshift(e));
     console.log('INV WRITE: inventory now has',inventory.length,'total rows after merge');
