@@ -2649,8 +2649,10 @@ async function commitInboxReview(){
   }
 
   // Split entries: POs go to PO Log, Invoices go to Inventory
+  console.log('SPLIT: newEntries doctypes=',newEntries.map(e=>e.size+':'+e.docType).join(', '));
   const poEntries=newEntries.filter(e=>e.docType==='PO');
   const invEntries=newEntries.filter(e=>e.docType!=='PO');
+  console.log('SPLIT: invEntries=',invEntries.length,'poEntries=',poEntries.length);
 
   // Write inventory entries
   if(invEntries.length){
