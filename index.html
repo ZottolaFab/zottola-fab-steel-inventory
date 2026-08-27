@@ -139,6 +139,9 @@ h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,
 .inv-actions{display:flex;gap:5px}
 .inv-remarks-bar{padding:6px 13px 10px;font-size:12px;color:var(--text3);background:var(--surface2);border-top:1px solid var(--border);display:flex;align-items:flex-start;gap:5px}
 
+.error-banner{background:var(--danger-bg);border:1px solid rgba(239,68,68,0.4);border-radius:10px;padding:10px 12px;margin-bottom:12px;display:flex;align-items:center;gap:8px;color:var(--danger);font-size:12px}
+.sticky-error{position:sticky;top:0;z-index:30;box-shadow:0 2px 8px rgba(0,0,0,0.3)}
+
 /* MODALS */
 .modal-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:50;align-items:flex-end;justify-content:center;backdrop-filter:blur(2px)}
 .modal-bg.open{display:flex}
@@ -660,6 +663,7 @@ h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,
 <div class="modal-bg" id="modal-use" onclick="closeModal('modal-use')">
   <div class="modal" onclick="event.stopPropagation()">
     <div class="modal-title"><span id="modal-use-title">Log usage</span><button class="btn btn-sm btn-icon" onclick="closeModal('modal-use')" aria-label="Close"><i class="ti ti-x"></i></button></div>
+    <div class="error-banner sticky-error" id="use-project-error" style="display:none"><i class="ti ti-alert-circle"></i> <strong>Select a project before confirming</strong> <button onclick="document.getElementById('use-project-error').style.display='none'" style="margin-left:auto;background:none;border:none;color:#ef4444;cursor:pointer;font-size:16px;padding:0"><i class="ti ti-x"></i></button></div>
     <div class="conflict-banner" id="use-conflict"><i class="ti ti-alert-triangle"></i> Qty may have changed — refreshing…</div>
     <div class="field"><label>Job / project</label><select id="modal-job"><option value="">— no project —</option></select></div>
     <div class="field"><label style="color:var(--text3)">Available</label><div id="modal-use-avail" style="font-size:18px;font-weight:700;color:var(--success);padding:4px 0">—</div></div>
@@ -1281,7 +1285,7 @@ async function saveItem(){
       return;
     }
     inventory.unshift(newItem);
-    clearAddForm();toast('Added to inventory','success');
+    clearAddForm();toast('Saving...','success');
   }
   await writeInventoryToSheet();
   await syncAll(false);
@@ -1381,7 +1385,8 @@ async function confirmUse(){
   const use=parseInt(document.getElementById('modal-use-qty').value)||0;
   const job=document.getElementById('modal-job').value;
   const rem=document.getElementById('modal-use-remarks').value.trim();
-  if(!job){toast('Select a project before confirming','danger');return;}
+  if(!job){document.getElementById('use-project-error').style.display='flex';return;}
+  document.getElementById('use-project-error').style.display='none';
   if(use<1){toast('Enter qty to deduct','danger');return;}
   // Re-read from sheet to check for conflicts
   const liveRows=await readTab(TABS.inv);
@@ -2286,7 +2291,11 @@ function renderInboxReviewItems(){
   groupItems.forEach(item=>{
     if(!item._project&&item.project) item._project=item.project;
   });
-  document.getElementById('inbox-review-count').textContent=groupItems.length+' items';
+  // Update count to show material items only (freight hidden)
+  const displayCount = groupItems.filter(item => !isFreightRow(item)).length;
+  const freightCount = groupItems.length - displayCount;
+  document.getElementById('inbox-review-count').textContent=displayCount+' items'+
+    (freightCount > 0 ? ' <span style="color:var(--text3)">('+freightCount+' freight hidden)</span>' : '');
   // Update commit button label based on doc type
   const isPOReview=currentInboxGroup&&currentInboxGroup.docType==='PO';
   const commitBtn=document.getElementById('inbox-commit-btn');
@@ -2336,7 +2345,10 @@ function renderInboxReviewItems(){
       window._matchedPONums=[];
     }
   }
-  groupItems.forEach((item,i)=>{
+  // Filter out freight rows from display
+  const displayItems = groupItems.filter(item => !isFreightRow(item));
+  
+  displayItems.forEach((item,i)=>{
     const rowKey=item._rowIdx; // Use _rowIdx as unique stable key — not indexOf (which fails for group copies)
     const div=document.createElement('div');
     div.id='inbx-li-'+rowKey;
@@ -2566,8 +2578,6 @@ async function commitInboxReview(){
   });
 
   // ATOMIC MODEL: ALL material items must be assigned (freight rows exempt)
-  const isFreightRow=i=>!i.shape||i.shape.toString().trim()===''||
-    (i.docType&&i.docType.toString().toLowerCase()==='freight');
   const assigned=included.filter(i=>i._project.trim()||isFreightRow(i));
   const unassigned=included.filter(i=>!i._project.trim()&&!isFreightRow(i));
 
