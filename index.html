@@ -2283,6 +2283,11 @@ function reviewInbox(){
   if(groups.length) reviewInboxGroup(0);
 }
 
+function isFreightRow(item){
+  return !item.shape || item.shape.toString().trim()==='' || 
+    (item.docType && item.docType.toString().toLowerCase()==='freight');
+}
+
 function renderInboxReviewItems(){
   const groupItems=currentInboxGroup?currentInboxGroup.items:inboxItems;
   // Ensure projects are loaded before rendering dropdowns
