@@ -2721,10 +2721,22 @@ async function commitInboxReview(){
     });
     await writePOToSheet();
     renderPoSection();
+    
+    // Close matched PO if user selected one (before returning from PO review)
+    if(window._closePOOnConfirm){
+      const poNumToClose=window._closePOOnConfirm;
+      poItems=poItems.filter(i=>i.poNum!==poNumToClose);
+      await writePOToSheet();
+      renderPoSection();
+      window._closePOOnConfirm=null;
+      toast('✅ PO# '+poNumToClose+' closed & removed','success');
+    } else {
+      toast('Projects assigned to PO','success');
+    }
+    
     currentInboxGroup=null;
     document.getElementById('import-inbox-review').style.display='none';
     document.getElementById('import-selector-view').style.display='block';
-    toast('Projects assigned to PO','success');
     return;
   }
 
