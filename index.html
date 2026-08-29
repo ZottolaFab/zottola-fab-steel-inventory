@@ -286,6 +286,11 @@ h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,
 <!-- INVENTORY -->
 <div class="content" id="tab-inventory">
   <div class="summary-bar" id="summary-bar"></div>
+  <div style="padding:0 0 12px 0">
+    <input type="text" id="inv-search" placeholder="Search: material, project, supplier, location…"
+      style="width:100%;padding:10px 12px;font-size:13px;border:1px solid var(--border2);border-radius:var(--radius);background:var(--surface2);color:var(--text);font-family:var(--font)"
+      oninput="filterInventory()">
+  </div>
   <div class="action-bar">
     <button class="btn btn-success btn-sm" style="flex:1" onclick="backupNow()"><i class="ti ti-cloud-download"></i> Backup now</button>
     <button class="btn btn-sm" style="flex:1" onclick="exportCSV()"><i class="ti ti-file-spreadsheet"></i> Export CSV</button>
@@ -1582,6 +1587,34 @@ function exportCSV(){
 }
 
 // ── RENDER ───────────────────────────────────────────────────────────
+function filterInventory(){
+  const q=(document.getElementById('inv-search')?.value||'').toLowerCase();
+  if(!q){renderInventory();return;}
+  const filtered=inventory.filter(item=>{
+    const shape=(item.shape||'').toLowerCase();
+    const size=(item.size||'').toLowerCase();
+    const project=(item.projectOrStock||'').toLowerCase();
+    const supplier=(item.supplier||'').toLowerCase();
+    const location=(item.location||'').toLowerCase();
+    return shape.includes(q)||size.includes(q)||project.includes(q)||supplier.includes(q)||location.includes(q);
+  });
+  renderInventoryFiltered(filtered);
+}
+
+function filterInventory(){
+  const q=(document.getElementById('inv-search')?.value||'').toLowerCase();
+  if(!q){renderInventory();return;}
+  const filtered=inventory.filter(item=>{
+    const shape=(item.shape||'').toLowerCase();
+    const size=(item.size||'').toLowerCase();
+    const project=(item.projectOrStock||'').toLowerCase();
+    const supplier=(item.supplier||'').toLowerCase();
+    const location=(item.location||'').toLowerCase();
+    return shape.includes(q)||size.includes(q)||project.includes(q)||supplier.includes(q)||location.includes(q);
+  });
+  renderInventoryFiltered(filtered);
+}
+
 function renderInventory(){
   const list=document.getElementById('inv-list'),sb=document.getElementById('summary-bar');
   if(!inventory.length){list.innerHTML=`<div class="empty"><span class="empty-icon"><i class="ti ti-package"></i></span>${sheetsReady?'No material logged yet. Use "Add material" to get started.':'Connecting to sheet…'}</div>`;sb.innerHTML='';return;}
@@ -1593,6 +1626,52 @@ function renderInventory(){
     <div class="stat"><div class="stat-val">${tP-rP}</div><div class="stat-label">Pieces used</div></div>`;
   const sorted=[...inventory].sort((a,b)=>a.size.localeCompare(b.size));
   list.innerHTML=sorted.map(item=>{
+    const pct=item.qty>0?item.qtyRemaining/item.qty:0;
+    const bc=pct===0?'badge-empty':pct<=0.2?'badge-low':'badge-ok';
+    const bl=pct===0?'Empty':pct<=0.2?'Low':'OK';
+    const ls=fmtLen(item.lenFt,item.lenIn);
+    return `<div class="inv-item">
+      <div class="inv-head">
+        <div class="inv-info">
+          <div class="inv-shape">${item.size}</div>
+          <div class="inv-loc"><i class="ti ti-map-pin" style="font-size:11px"></i> ${item.location}</div>
+        </div>
+        <span class="inv-badge ${bc}">${bl}</span>
+      </div>
+      <div class="inv-meta">
+        ${item.wPerFt?`<span class="meta-chip">${item.wPerFt} lbs/ft</span>`:''}
+        ${item.totalWeight?`<span class="meta-chip">${parseFloat(item.totalWeight).toFixed(0)} lbs</span>`:''}
+        ${ls?`<span class="meta-chip">${ls} ea.</span>`:''}
+        <span class="meta-chip">${new Date(item.added).toLocaleDateString()}</span>
+        ${item.edited?`<span class="meta-chip edited">edited</span>`:''}${item.docType==='PO'?`<span class="meta-chip" style="color:#60a5fa">On Order</span>`:''}${item.docType==='Invoice'?`<span class="meta-chip" style="color:var(--success)">Received</span>`:''}
+      </div>
+      <div class="inv-meta" style="margin-top:2px">
+        ${item.supplier?`<span class="meta-chip" style="color:var(--text2)">${item.supplier}</span>`:''}
+        ${item.invoiceNum?`<span class="meta-chip">Inv: ${item.invoiceNum}</span>`:''}
+        ${item.poNum?`<span class="meta-chip" style="color:#fff;font-weight:700">PO: ${item.poNum}</span>`:''}
+        ${item.projectOrStock?`<span class="meta-chip" style="color:var(--warning)">${item.projectOrStock}</span>`:''}
+      </div>
+      <div class="inv-footer">
+        <div class="qty-row">
+          <span style="font-size:12px;color:var(--text3)">Rem</span>
+          <span class="qty-val">${item.qtyRemaining}</span>
+          <span class="qty-of">/ ${item.qty} pcs</span>
+        </div>
+        <div class="inv-actions">
+          <button class="btn btn-primary btn-sm" onclick="openUse('${item.id}')"><i class="ti ti-minus"></i> Use</button>
+          <button class="btn btn-sm btn-icon" onclick="editItem('${item.id}')" aria-label="Edit"><i class="ti ti-pencil"></i></button>
+          <button class="btn btn-sm btn-icon btn-danger" onclick="deleteItem('${item.id}')" aria-label="Delete"><i class="ti ti-trash"></i></button>
+        </div>
+      </div>
+      ${item.remarks?`<div class="inv-remarks-bar"><i class="ti ti-notes" style="font-size:11px;margin-top:1px;flex-shrink:0"></i> ${item.remarks}</div>`:''}
+    </div>`;
+  }).join('');
+}
+
+function renderInventoryFiltered(filtered){
+  const list=document.getElementById('inv-list');
+  if(!filtered.length){list.innerHTML=`<div class="empty" style="padding:30px 14px"><span class="empty-icon"><i class="ti ti-search"></i></span>No materials match your search.</div>`;return;}
+  list.innerHTML=filtered.map(item=>{
     const pct=item.qty>0?item.qtyRemaining/item.qty:0;
     const bc=pct===0?'badge-empty':pct<=0.2?'badge-low':'badge-ok';
     const bl=pct===0?'Empty':pct<=0.2?'Low':'OK';
@@ -1919,7 +1998,11 @@ function switchTab(name,btn){
   document.querySelectorAll('.tab').forEach(b=>b.classList.remove('active'));
   btn.classList.add('active');
   currentTab=name;
-  if(name==='inventory')renderInventory();
+  if(name==='inventory'){
+    const searchBox=document.getElementById('inv-search');
+    if(searchBox) searchBox.value='';
+    renderInventory();
+  }
   if(name==='add'){buildAddProjDD();}
   if(name==='import'){renderImportSelector();renderInboxSection();renderPoSection();}
   if(name==='reconcile')loadPOReconciliation();
