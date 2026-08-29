@@ -274,6 +274,7 @@ h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,
 <div class="tabs">
   <button class="tab active" onclick="switchTab('inventory',this)">Inventory</button>
   <button class="tab" onclick="switchTab('import',this)"><i class="ti ti-file-import" style="font-size:13px"></i> Import <span id="inbox-badge" style="display:none;background:var(--danger);color:#fff;border-radius:20px;padding:1px 6px;font-size:10px;margin-left:2px">0</span></button>
+  <button class="tab" onclick="switchTab('reconcile',this)"><i class="ti ti-clipboard-check" style="font-size:13px"></i> PO Reconciliation</button>
   <button class="tab" onclick="switchTab('add',this)">Add material</button>
   <button class="tab" onclick="switchTab('log',this)">Usage log</button>
   <button class="tab" onclick="switchTab('lists',this)">Locations &amp; types</button>
@@ -555,6 +556,68 @@ h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,
       <div style="font-size:13px;color:var(--text2);line-height:1.6" id="import-result-sub"></div>
     </div>
     <button class="btn btn-full" onclick="importBackToSelector()"><i class="ti ti-arrow-left"></i> Import another invoice</button>
+  </div>
+</div>
+
+<!-- PO RECONCILIATION -->
+<div class="content pad0" id="tab-reconcile" style="display:none">
+  <div style="padding:14px;display:flex;flex-direction:column;gap:12px">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+      <div>
+        <div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:0.06em">PO Reconciliation</div>
+        <div style="font-size:13px;color:var(--text2);margin-top:3px">Match invoices to purchase orders, review variances, and confirm</div>
+      </div>
+      <button class="btn btn-sm" onclick="loadPOReconciliation()" style="flex-shrink:0"><i class="ti ti-refresh"></i> Reload</button>
+    </div>
+    <div style="background:var(--accent-bg);border:1px solid var(--accent-dim);border-radius:var(--radius);padding:10px 12px;font-size:12px;color:var(--accent)">
+      <i class="ti ti-info-circle"></i> Review PO # matches, compare Qty/Material/Price, then approve to delete PO and move to inventory
+    </div>
+  </div>
+  <div id="reconcile-list" style="padding:12px;display:flex;flex-direction:column;gap:8px"></div>
+  <div id="reconcile-empty" style="padding:40px 14px;text-align:center;color:var(--text3)">
+    <div style="font-size:36px;margin-bottom:8px">✓</div>
+    <div style="font-size:13px">No pending PO invoices to reconcile</div>
+  </div>
+</div>
+
+<!-- PO RECONCILIATION MODAL -->
+<div class="modal-bg" id="po-compare-modal">
+  <div class="modal" style="max-width:600px">
+    <div class="modal-title">
+      <span><i class="ti ti-clipboard-check"></i> PO Reconciliation</span>
+      <button class="btn btn-sm" onclick="closePOCompareModal()" style="background:none;border:none;color:var(--text3);padding:0;font-size:18px">✕</button>
+    </div>
+    
+    <div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:12px;margin-bottom:14px">
+      <div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px">Invoice</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:13px;line-height:1.6">
+        <div><span style="color:var(--text3)">Invoice #:</span> <span style="color:var(--text)" id="modal-inv-num"></span></div>
+        <div><span style="color:var(--text3)">Supplier:</span> <span style="color:var(--text)" id="modal-inv-supplier"></span></div>
+        <div><span style="color:var(--text3)">Date:</span> <span style="color:var(--text)" id="modal-inv-date"></span></div>
+        <div><span style="color:var(--text3)">PO #:</span> <span style="color:var(--accent);font-weight:600" id="modal-inv-pono"></span></div>
+      </div>
+    </div>
+
+    <div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:10px">Comparison: PO vs Invoice</div>
+    <div id="modal-comparison-rows" style="display:flex;flex-direction:column;gap:12px;margin-bottom:14px"></div>
+
+    <div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:12px;margin-bottom:14px">
+      <div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px">Project</div>
+      <div style="font-size:14px;font-weight:600;color:var(--accent)" id="modal-project-name">—</div>
+      <div style="font-size:11px;color:var(--text3);margin-top:3px">From matching PO</div>
+    </div>
+
+    <div style="background:var(--danger-bg);border:1px solid var(--danger);border-radius:var(--radius);padding:10px 12px;font-size:12px;color:var(--danger);display:none;margin-bottom:14px" id="modal-warning">
+      <i class="ti ti-alert-triangle"></i> <span id="modal-warning-text"></span>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+      <button class="btn" onclick="closePOCompareModal()">Cancel</button>
+      <button class="btn btn-success" onclick="approvePOMatch()" style="background:var(--success-bg);color:var(--success);border-color:var(--success)">
+        <i class="ti ti-check"></i> Approve &amp; Reconcile
+      </button>
+    </div>
+    <p style="font-size:11px;color:var(--text3);text-align:center;margin-top:12px">Approval will delete PO line and move invoice to inventory</p>
   </div>
 </div>
 
@@ -1635,9 +1698,223 @@ function renderCurrentTab(){
   else if(currentTab==='lists')renderLists();
 }
 
+// ── PO RECONCILIATION ───────────────────────────────────────────────
+let currentPOMatch = null; // Track current modal data
+
+async function loadPOReconciliation(){
+  try{
+    setSyncStatus('syncing');
+    // Read Invoice Inbox (columns: Supplier, Invoice #, PO #, Invoice Date, Doc Type, Shape, Size, Qty, Length Ft, Length In, Weight Lbs, Cost Per Lb, Total Cost, Grade, Heat #, Remarks, Status, Project, Fuel Surcharge, _rowIdx)
+    const inboxData = await readSheetData('Invoice Inbox');
+    // Read PO Log (columns: similar)
+    const poLogData = await readSheetData('PO Log');
+    
+    // Filter invoices with Doc Type = "PO"
+    const pendingInvoices = inboxData.filter(row => row['Doc Type'] === 'PO');
+    
+    const reconcileList = document.getElementById('reconcile-list');
+    const reconcileEmpty = document.getElementById('reconcile-empty');
+    
+    if(pendingInvoices.length === 0){
+      reconcileList.innerHTML = '';
+      reconcileEmpty.style.display = 'block';
+      setSyncStatus('ok');
+      return;
+    }
+    
+    reconcileEmpty.style.display = 'none';
+    reconcileList.innerHTML = '';
+    
+    // Build reconciliation items
+    for(const invItem of pendingInvoices){
+      const poNum = invItem['PO #'];
+      const matchingPO = poLogData.find(po => po['PO #'] === poNum);
+      
+      const card = document.createElement('div');
+      card.className = 'card';
+      card.style.cursor = 'pointer';
+      
+      const hasVariance = matchingPO && (
+        invItem['Qty'] !== matchingPO['Qty'] ||
+        invItem['Total Cost'] !== matchingPO['Total Cost']
+      );
+      
+      card.innerHTML = `
+        <div class="card-hd" style="justify-content:space-between">
+          <div>
+            <div style="font-size:13px;font-weight:600;color:var(--text)">Invoice #${invItem['Invoice #'] || '—'}</div>
+            <div style="font-size:11px;color:var(--text3);margin-top:3px">${invItem['Supplier'] || '—'} · PO #${poNum || 'N/A'}</div>
+          </div>
+          <div style="text-align:right">
+            ${matchingPO ? '<span style="background:var(--success-bg);color:var(--success);border-radius:6px;padding:3px 9px;font-size:11px;font-weight:600">Match found</span>' : '<span style="background:var(--warning-bg);color:var(--warning);border-radius:6px;padding:3px 9px;font-size:11px;font-weight:600">No match</span>'}
+            ${hasVariance ? '<span style="background:var(--danger-bg);color:var(--danger);border-radius:6px;padding:3px 9px;font-size:11px;font-weight:600;margin-left:5px">Variance</span>' : ''}
+          </div>
+        </div>
+        <div class="card-body" style="padding:10px 14px;border-top:1px solid var(--border);cursor:pointer" onclick="showPOCompareModal('${invItem._rowIdx}')">
+          <div style="font-size:12px;display:grid;grid-template-columns:1fr 1fr;gap:8px;color:var(--text2)">
+            <div><span style="color:var(--text3)">Invoice Qty:</span> ${invItem['Qty'] || '—'}</div>
+            <div><span style="color:var(--text3)">PO Qty:</span> ${matchingPO ? matchingPO['Qty'] : '—'}</div>
+            <div><span style="color:var(--text3)">Invoice $:</span> $${parseFloat(invItem['Total Cost'] || 0).toFixed(2)}</div>
+            <div><span style="color:var(--text3)">PO $:</span> ${matchingPO ? '$' + parseFloat(matchingPO['Total Cost'] || 0).toFixed(2) : '—'}</div>
+          </div>
+          <div style="font-size:11px;color:var(--text3);margin-top:8px;text-align:right">
+            <i class="ti ti-click"></i> Click to review details
+          </div>
+        </div>
+      `;
+      reconcileList.appendChild(card);
+    }
+    setSyncStatus('ok');
+  }catch(err){
+    console.error('PO Reconciliation error:', err);
+    setSyncStatus('err');
+  }
+}
+
+async function showPOCompareModal(invRowIdx){
+  try{
+    const inboxData = await readSheetData('Invoice Inbox');
+    const poLogData = await readSheetData('PO Log');
+    
+    const invItem = inboxData.find(row => row._rowIdx === invRowIdx);
+    if(!invItem) return;
+    
+    const poNum = invItem['PO #'];
+    const matchingPO = poLogData.find(po => po['PO #'] === poNum);
+    
+    // Store current match for approval
+    currentPOMatch = { invItem, matchingPO, invRowIdx, poNum };
+    
+    // Populate modal
+    document.getElementById('modal-inv-num').textContent = invItem['Invoice #'] || '—';
+    document.getElementById('modal-inv-supplier').textContent = invItem['Supplier'] || '—';
+    document.getElementById('modal-inv-date').textContent = invItem['Invoice Date'] || '—';
+    document.getElementById('modal-inv-pono').textContent = poNum || 'No PO #';
+    document.getElementById('modal-project-name').textContent = matchingPO ? (matchingPO['Project'] || '—') : '(No PO match)';
+    
+    // Build comparison rows
+    const compRows = document.getElementById('modal-comparison-rows');
+    compRows.innerHTML = '';
+    
+    const fields = [
+      { label: 'Qty', invKey: 'Qty', poKey: 'Qty' },
+      { label: 'Shape', invKey: 'Shape', poKey: 'Shape' },
+      { label: 'Size', invKey: 'Size', poKey: 'Size' },
+      { label: 'Length', invKey: 'Length Ft', poKey: 'Length Ft' },
+      { label: 'Unit Price', invKey: 'Cost Per Lb', poKey: 'Cost Per Lb' },
+      { label: 'Total Cost', invKey: 'Total Cost', poKey: 'Total Cost' }
+    ];
+    
+    const variances = [];
+    
+    for(const field of fields){
+      const invVal = invItem[field.invKey];
+      const poVal = matchingPO ? matchingPO[field.poKey] : null;
+      const match = invVal === poVal;
+      
+      let variance = null;
+      if(!matchingPO) variance = 'no-po';
+      else if(!match){
+        if(field.invKey === 'Shape' || field.invKey === 'Size') variance = 'material';
+        else variance = 'qty-price';
+      }
+      
+      if(variance) variances.push(variance);
+      
+      const row = document.createElement('div');
+      row.style.cssText = `
+        background: ${variance === 'material' ? 'var(--danger-bg)' : variance ? 'var(--warning-bg)' : 'var(--surface2)'};
+        border: 1px solid ${variance === 'material' ? 'var(--danger)' : variance ? 'var(--warning)' : 'var(--border)'};
+        border-radius: var(--radius);
+        padding: 10px 12px;
+      `;
+      
+      row.innerHTML = `
+        <div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px">${field.label}</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:13px">
+          <div>
+            <div style="color:var(--text3);font-size:11px;margin-bottom:2px">Invoice</div>
+            <div style="font-weight:600;color:var(--text)">${invVal || '—'}</div>
+          </div>
+          <div>
+            <div style="color:var(--text3);font-size:11px;margin-bottom:2px">PO</div>
+            <div style="font-weight:600;color:${match || !matchingPO ? 'var(--text)' : 'var(--danger)'}">${poVal || '—'}</div>
+          </div>
+        </div>
+      `;
+      compRows.appendChild(row);
+    }
+    
+    // Show warnings
+    const warningDiv = document.getElementById('modal-warning');
+    const warningText = document.getElementById('modal-warning-text');
+    
+    if(variances.length > 0){
+      warningDiv.style.display = 'block';
+      const matVars = variances.filter(v => v === 'material');
+      const qtyVars = variances.filter(v => v !== 'material' && v !== 'no-po');
+      let msg = '';
+      if(matVars.length > 0) msg += 'Material mismatch. ';
+      if(qtyVars.length > 0) msg += 'Qty or price difference. ';
+      if(variances.includes('no-po')) msg += 'No matching PO found. ';
+      warningText.textContent = msg + 'You can still approve.';
+    } else {
+      warningDiv.style.display = 'none';
+    }
+    
+    document.getElementById('po-compare-modal').classList.add('open');
+  }catch(err){
+    console.error('Error showing modal:', err);
+  }
+}
+
+function closePOCompareModal(){
+  document.getElementById('po-compare-modal').classList.remove('open');
+  currentPOMatch = null;
+}
+
+async function approvePOMatch(){
+  if(!currentPOMatch) return;
+  
+  try{
+    const { invItem, matchingPO, invRowIdx, poNum } = currentPOMatch;
+    
+    // Call Apps Script to:
+    // 1. Delete PO line from PO Log
+    // 2. Update Invoice Inbox row: change Doc Type from "PO" to "Invoice"
+    
+    const payload = {
+      action: 'deletePOLineAndUpdateDocType',
+      sheetId: '1BtRJEG7IaNveaekFgY3flAO-3cJ-ysKOfxfkkpeO-U0',
+      invoiceInboxRowIdx: invRowIdx,  // Row index in Invoice Inbox
+      poLineRowIdx: matchingPO ? matchingPO._rowIdx : null  // Row index in PO Log
+    };
+    
+    const resp = await fetch(WRITE_SCRIPT_URL, {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    });
+    
+    const result = await resp.json();
+    
+    if(result.success){
+      closePOCompareModal();
+      // Refresh inventory and reconciliation
+      await loadInventory();
+      await loadPOReconciliation();
+      alert('✓ PO reconciliation complete. PO line deleted, invoice moved to inventory.');
+    } else {
+      alert('Error: ' + (result.error || 'Unknown error'));
+    }
+  }catch(err){
+    console.error('Approval error:', err);
+    alert('Error: ' + err.message);
+  }
+}
+
 // ── TAB SWITCHING ────────────────────────────────────────────────────
 function switchTab(name,btn){
-  ['inventory','add','log','backups','lists','settings','import','consumables'].forEach(t=>document.getElementById('tab-'+t).style.display='none');
+  ['inventory','add','log','backups','lists','settings','import','consumables','reconcile'].forEach(t=>document.getElementById('tab-'+t).style.display='none');
   document.getElementById('tab-'+name).style.display='flex';
   document.querySelectorAll('.tab').forEach(b=>b.classList.remove('active'));
   btn.classList.add('active');
@@ -1645,6 +1922,7 @@ function switchTab(name,btn){
   if(name==='inventory')renderInventory();
   if(name==='add'){buildAddProjDD();}
   if(name==='import'){renderImportSelector();renderInboxSection();renderPoSection();}
+  if(name==='reconcile')loadPOReconciliation();
   if(name==='consumables'){buildConsProjDD();renderConsumables();}
   else if(name==='log')renderLog();
   else if(name==='backups')renderBackupLog();
