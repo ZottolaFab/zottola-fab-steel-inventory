@@ -1590,21 +1590,30 @@ function exportCSV(){
 function filterInventory(){
   const q=(document.getElementById('inv-search')?.value||'').toLowerCase();
   if(!q){renderInventory();return;}
-  const filtered=inventory.filter(item=>{
-    const shape=(item.shape||'').toLowerCase();
-    const size=(item.size||'').toLowerCase();
-    const project=(item.projectOrStock||'').toLowerCase();
-    const supplier=(item.supplier||'').toLowerCase();
-    const location=(item.location||'').toLowerCase();
-    return shape.includes(q)||size.includes(q)||project.includes(q)||supplier.includes(q)||location.includes(q);
-  });
-  renderInventoryFiltered(filtered);
-}
-
-function filterInventory(){
-  const q=(document.getElementById('inv-search')?.value||'').toLowerCase();
-  if(!q){renderInventory();return;}
-  const filtered=inventory.filter(item=>{
+  const merged=[...inventory,...poItems.map(po=>({
+    id:po.poNum||'po-'+po._rowIdx,
+    size:po.size,
+    shape:po.shape,
+    qty:po.qty,
+    qtyRemaining:po.qty,
+    location:'On Order',
+    supplier:po.supplier,
+    poNum:po.poNum,
+    invoiceNum:null,
+    projectOrStock:po.project,
+    wPerFt:po.wPerFt,
+    totalWeight:po.weightLbs,
+    lenFt:po.lenFt,
+    lenIn:po.lenIn,
+    grade:po.grade,
+    heatNumber:po.heat,
+    remarks:po.remarks,
+    added:po.poDate||new Date().toISOString(),
+    docType:'PO',
+    _isPOItem:true,
+    _poData:po
+  }))];
+  const filtered=merged.filter(item=>{
     const shape=(item.shape||'').toLowerCase();
     const size=(item.size||'').toLowerCase();
     const project=(item.projectOrStock||'').toLowerCase();
@@ -1617,33 +1626,60 @@ function filterInventory(){
 
 function renderInventory(){
   const list=document.getElementById('inv-list'),sb=document.getElementById('summary-bar');
-  if(!inventory.length){list.innerHTML=`<div class="empty"><span class="empty-icon"><i class="ti ti-package"></i></span>${sheetsReady?'No material logged yet. Use "Add material" to get started.':'Connecting to sheet…'}</div>`;sb.innerHTML='';return;}
+  // Merge inventory and PO items for display
+  const merged=[...inventory,...poItems.map(po=>({
+    id:po.poNum||'po-'+po._rowIdx,
+    size:po.size,
+    shape:po.shape,
+    qty:po.qty,
+    qtyRemaining:po.qty,
+    location:'On Order',
+    supplier:po.supplier,
+    poNum:po.poNum,
+    invoiceNum:null,
+    projectOrStock:po.project,
+    wPerFt:po.wPerFt,
+    totalWeight:po.weightLbs,
+    lenFt:po.lenFt,
+    lenIn:po.lenIn,
+    grade:po.grade,
+    heatNumber:po.heat,
+    remarks:po.remarks,
+    added:po.poDate||new Date().toISOString(),
+    docType:'PO',
+    _isPOItem:true,
+    _poData:po
+  }))];
+  if(!merged.length){list.innerHTML=`<div class="empty"><span class="empty-icon"><i class="ti ti-package"></i></span>${sheetsReady?'No material logged yet. Use "Add material" to get started.':'Connecting to sheet…'}</div>`;sb.innerHTML='';return;}
   const tP=inventory.reduce((a,i)=>a+i.qty,0),rP=inventory.reduce((a,i)=>a+i.qtyRemaining,0),tW=inventory.reduce((a,i)=>a+(i.totalWeight||0),0);
   sb.innerHTML=`
-    <div class="stat accent"><div class="stat-val">${rP}</div><div class="stat-label">Pieces remaining</div></div>
-    <div class="stat"><div class="stat-val">${inventory.length}</div><div class="stat-label">Entries</div></div>
-    <div class="stat"><div class="stat-val">${tW>0?(tW/2000).toFixed(1)+' T':'—'}</div><div class="stat-label">Total wt (tons)</div></div>
+    <div class="stat accent"><div class="stat-val">${rP}</div><div class="stat-label">Pieces received</div></div>
+    <div class="stat"><div class="stat-val">${inventory.length+poItems.length}</div><div class="stat-label">Total entries</div></div>
+    <div class="stat"><div class="stat-val">${tW>0?(tW/2000).toFixed(1)+' T':'—'}</div><div class="stat-label">Received wt (tons)</div></div>
     <div class="stat"><div class="stat-val">${tP-rP}</div><div class="stat-label">Pieces used</div></div>`;
-  const sorted=[...inventory].sort((a,b)=>a.size.localeCompare(b.size));
+  const sorted=[...merged].sort((a,b)=>a.size.localeCompare(b.size));
   list.innerHTML=sorted.map(item=>{
-    const pct=item.qty>0?item.qtyRemaining/item.qty:0;
-    const bc=pct===0?'badge-empty':pct<=0.2?'badge-low':'badge-ok';
-    const bl=pct===0?'Empty':pct<=0.2?'Low':'OK';
+    const isPO=item.docType==='PO';
+    const pct=!isPO&&item.qty>0?item.qtyRemaining/item.qty:0;
+    const bc=isPO?'badge-low':(pct===0?'badge-empty':pct<=0.2?'badge-low':'badge-ok');
+    const bl=isPO?'On Order':(pct===0?'Empty':pct<=0.2?'Low':'OK');
     const ls=fmtLen(item.lenFt,item.lenIn);
-    return `<div class="inv-item">
+    const borderCol=isPO?'#60a5fa':'var(--border)';
+    const bgCol=isPO?'rgba(96,165,250,0.08)':'transparent';
+    return `<div class="inv-item" style="border-color:${borderCol};background:${bgCol}">
       <div class="inv-head">
         <div class="inv-info">
           <div class="inv-shape">${item.size}</div>
           <div class="inv-loc"><i class="ti ti-map-pin" style="font-size:11px"></i> ${item.location}</div>
         </div>
-        <span class="inv-badge ${bc}">${bl}</span>
+        <span class="inv-badge ${bc}" style="${isPO?'background:#1e3a8a;color:#60a5fa;border-color:#0369a1':''}">${bl}</span>
       </div>
       <div class="inv-meta">
         ${item.wPerFt?`<span class="meta-chip">${item.wPerFt} lbs/ft</span>`:''}
         ${item.totalWeight?`<span class="meta-chip">${parseFloat(item.totalWeight).toFixed(0)} lbs</span>`:''}
         ${ls?`<span class="meta-chip">${ls} ea.</span>`:''}
         <span class="meta-chip">${new Date(item.added).toLocaleDateString()}</span>
-        ${item.edited?`<span class="meta-chip edited">edited</span>`:''}${item.docType==='PO'?`<span class="meta-chip" style="color:#60a5fa">On Order</span>`:''}${item.docType==='Invoice'?`<span class="meta-chip" style="color:var(--success)">Received</span>`:''}
+        ${item.edited?`<span class="meta-chip edited">edited</span>`:''}${isPO?`<span class="meta-chip" style="background:#1e3a8a;color:#60a5fa;border:1px solid #0369a1;font-weight:600"><i class="ti ti-alert-circle" style="font-size:10px;margin-right:2px"></i>On Order</span>`:`<span class="meta-chip" style="color:var(--success)">Received</span>`}
       </div>
       <div class="inv-meta" style="margin-top:2px">
         ${item.supplier?`<span class="meta-chip" style="color:var(--text2)">${item.supplier}</span>`:''}
@@ -1653,14 +1689,14 @@ function renderInventory(){
       </div>
       <div class="inv-footer">
         <div class="qty-row">
-          <span style="font-size:12px;color:var(--text3)">Rem</span>
-          <span class="qty-val">${item.qtyRemaining}</span>
+          <span style="font-size:12px;color:var(--text3)">${isPO?'Order':'Rem'}</span>
+          <span class="qty-val" style="${isPO?'color:#60a5fa':''}">${item.qtyRemaining}</span>
           <span class="qty-of">/ ${item.qty} pcs</span>
         </div>
         <div class="inv-actions">
-          <button class="btn btn-primary btn-sm" onclick="openUse('${item.id}')"><i class="ti ti-minus"></i> Use</button>
-          <button class="btn btn-sm btn-icon" onclick="editItem('${item.id}')" aria-label="Edit"><i class="ti ti-pencil"></i></button>
-          <button class="btn btn-sm btn-icon btn-danger" onclick="deleteItem('${item.id}')" aria-label="Delete"><i class="ti ti-trash"></i></button>
+          ${!isPO?`<button class="btn btn-primary btn-sm" onclick="openUse('${item.id}')"><i class="ti ti-minus"></i> Use</button>`:''}
+          ${!isPO?`<button class="btn btn-sm btn-icon" onclick="editItem('${item.id}')" aria-label="Edit"><i class="ti ti-pencil"></i></button>`:''}
+          ${!isPO?`<button class="btn btn-sm btn-icon btn-danger" onclick="deleteItem('${item.id}')" aria-label="Delete"><i class="ti ti-trash"></i></button>`:''}
         </div>
       </div>
       ${item.remarks?`<div class="inv-remarks-bar"><i class="ti ti-notes" style="font-size:11px;margin-top:1px;flex-shrink:0"></i> ${item.remarks}</div>`:''}
@@ -1672,24 +1708,27 @@ function renderInventoryFiltered(filtered){
   const list=document.getElementById('inv-list');
   if(!filtered.length){list.innerHTML=`<div class="empty" style="padding:30px 14px"><span class="empty-icon"><i class="ti ti-search"></i></span>No materials match your search.</div>`;return;}
   list.innerHTML=filtered.map(item=>{
-    const pct=item.qty>0?item.qtyRemaining/item.qty:0;
-    const bc=pct===0?'badge-empty':pct<=0.2?'badge-low':'badge-ok';
-    const bl=pct===0?'Empty':pct<=0.2?'Low':'OK';
+    const isPO=item.docType==='PO';
+    const pct=!isPO&&item.qty>0?item.qtyRemaining/item.qty:0;
+    const bc=isPO?'badge-low':(pct===0?'badge-empty':pct<=0.2?'badge-low':'badge-ok');
+    const bl=isPO?'On Order':(pct===0?'Empty':pct<=0.2?'Low':'OK');
     const ls=fmtLen(item.lenFt,item.lenIn);
-    return `<div class="inv-item">
+    const borderCol=isPO?'#60a5fa':'var(--border)';
+    const bgCol=isPO?'rgba(96,165,250,0.08)':'transparent';
+    return `<div class="inv-item" style="border-color:${borderCol};background:${bgCol}">
       <div class="inv-head">
         <div class="inv-info">
           <div class="inv-shape">${item.size}</div>
           <div class="inv-loc"><i class="ti ti-map-pin" style="font-size:11px"></i> ${item.location}</div>
         </div>
-        <span class="inv-badge ${bc}">${bl}</span>
+        <span class="inv-badge ${bc}" style="${isPO?'background:#1e3a8a;color:#60a5fa;border-color:#0369a1':''}">${bl}</span>
       </div>
       <div class="inv-meta">
         ${item.wPerFt?`<span class="meta-chip">${item.wPerFt} lbs/ft</span>`:''}
         ${item.totalWeight?`<span class="meta-chip">${parseFloat(item.totalWeight).toFixed(0)} lbs</span>`:''}
         ${ls?`<span class="meta-chip">${ls} ea.</span>`:''}
         <span class="meta-chip">${new Date(item.added).toLocaleDateString()}</span>
-        ${item.edited?`<span class="meta-chip edited">edited</span>`:''}${item.docType==='PO'?`<span class="meta-chip" style="color:#60a5fa">On Order</span>`:''}${item.docType==='Invoice'?`<span class="meta-chip" style="color:var(--success)">Received</span>`:''}
+        ${item.edited?`<span class="meta-chip edited">edited</span>`:''}${isPO?`<span class="meta-chip" style="background:#1e3a8a;color:#60a5fa;border:1px solid #0369a1;font-weight:600"><i class="ti ti-alert-circle" style="font-size:10px;margin-right:2px"></i>On Order</span>`:`<span class="meta-chip" style="color:var(--success)">Received</span>`}
       </div>
       <div class="inv-meta" style="margin-top:2px">
         ${item.supplier?`<span class="meta-chip" style="color:var(--text2)">${item.supplier}</span>`:''}
@@ -1699,14 +1738,14 @@ function renderInventoryFiltered(filtered){
       </div>
       <div class="inv-footer">
         <div class="qty-row">
-          <span style="font-size:12px;color:var(--text3)">Rem</span>
-          <span class="qty-val">${item.qtyRemaining}</span>
+          <span style="font-size:12px;color:var(--text3)">${isPO?'Order':'Rem'}</span>
+          <span class="qty-val" style="${isPO?'color:#60a5fa':''}">${item.qtyRemaining}</span>
           <span class="qty-of">/ ${item.qty} pcs</span>
         </div>
         <div class="inv-actions">
-          <button class="btn btn-primary btn-sm" onclick="openUse('${item.id}')"><i class="ti ti-minus"></i> Use</button>
-          <button class="btn btn-sm btn-icon" onclick="editItem('${item.id}')" aria-label="Edit"><i class="ti ti-pencil"></i></button>
-          <button class="btn btn-sm btn-icon btn-danger" onclick="deleteItem('${item.id}')" aria-label="Delete"><i class="ti ti-trash"></i></button>
+          ${!isPO?`<button class="btn btn-primary btn-sm" onclick="openUse('${item.id}')"><i class="ti ti-minus"></i> Use</button>`:''}
+          ${!isPO?`<button class="btn btn-sm btn-icon" onclick="editItem('${item.id}')" aria-label="Edit"><i class="ti ti-pencil"></i></button>`:''}
+          ${!isPO?`<button class="btn btn-sm btn-icon btn-danger" onclick="deleteItem('${item.id}')" aria-label="Delete"><i class="ti ti-trash"></i></button>`:''}
         </div>
       </div>
       ${item.remarks?`<div class="inv-remarks-bar"><i class="ti ti-notes" style="font-size:11px;margin-top:1px;flex-shrink:0"></i> ${item.remarks}</div>`:''}
