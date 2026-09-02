@@ -619,10 +619,10 @@ h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
       <button class="btn" onclick="closePOCompareModal()">Cancel</button>
       <button class="btn btn-success" onclick="approvePOMatch()" style="background:var(--success-bg);color:var(--success);border-color:var(--success)">
-        <i class="ti ti-check"></i> Approve &amp; Reconcile
+        <i class="ti ti-check"></i> Approve Selected
       </button>
     </div>
-    <p style="font-size:11px;color:var(--text3);text-align:center;margin-top:12px">Approval will delete PO line and move invoice to inventory</p>
+    <p style="font-size:11px;color:var(--text3);text-align:center;margin-top:12px">Only checked items will be moved to inventory. Unchecked items stay on PO Log.</p>
   </div>
 </div>
 
@@ -1898,91 +1898,76 @@ async function showPOCompareModal(invRowIdx){
     if(!invItem) return;
     
     const poNum = invItem['PO #'];
-    const matchingPO = poLogData.find(po => po['PO #'] === poNum);
+    const matchingPOs = poLogData.filter(po => po['PO #'] === poNum);
     
     // Store current match for approval
-    currentPOMatch = { invItem, matchingPO, invRowIdx, poNum };
+    currentPOMatch = { invItem, matchingPOs, invRowIdx, poNum };
     
-    // Populate modal
+    // Populate modal header
     document.getElementById('modal-inv-num').textContent = invItem['Invoice #'] || '—';
     document.getElementById('modal-inv-supplier').textContent = invItem['Supplier'] || '—';
     document.getElementById('modal-inv-date').textContent = invItem['Invoice Date'] || '—';
     document.getElementById('modal-inv-pono').textContent = poNum || 'No PO #';
-    document.getElementById('modal-project-name').textContent = matchingPO ? (matchingPO['Project'] || '—') : '(No PO match)';
+    document.getElementById('modal-project-name').textContent = matchingPOs.length > 0 ? (matchingPOs[0]['Project'] || '—') : '(No PO match)';
     
-    // Build comparison rows
+    // Build PO item list with checkboxes
     const compRows = document.getElementById('modal-comparison-rows');
     compRows.innerHTML = '';
     
-    const fields = [
-      { label: 'Qty', invKey: 'Qty', poKey: 'Qty' },
-      { label: 'Shape', invKey: 'Shape', poKey: 'Shape' },
-      { label: 'Size', invKey: 'Size', poKey: 'Size' },
-      { label: 'Length', invKey: 'Length Ft', poKey: 'Length Ft' },
-      { label: 'Unit Price', invKey: 'Cost Per Lb', poKey: 'Cost Per Lb' },
-      { label: 'Total Cost', invKey: 'Total Cost', poKey: 'Total Cost' }
-    ];
+    if(matchingPOs.length === 0){
+      compRows.innerHTML = `<div style="color:var(--danger);font-size:13px;padding:12px;background:var(--danger-bg);border:1px solid var(--danger);border-radius:var(--radius)">No matching PO found</div>`;
+      return;
+    }
     
-    const variances = [];
-    
-    for(const field of fields){
-      const invVal = invItem[field.invKey];
-      const poVal = matchingPO ? matchingPO[field.poKey] : null;
-      const match = invVal === poVal;
+    // Show all PO items as checkable rows
+    matchingPOs.forEach((po, idx) => {
+      const poRowIdx = po._rowIdx;
+      const itemId = `po-item-${idx}`;
       
-      let variance = null;
-      if(!matchingPO) variance = 'no-po';
-      else if(!match){
-        if(field.invKey === 'Shape' || field.invKey === 'Size') variance = 'material';
-        else variance = 'qty-price';
-      }
-      
-      if(variance) variances.push(variance);
-      
-      const row = document.createElement('div');
-      row.style.cssText = `
-        background: ${variance === 'material' ? 'var(--danger-bg)' : variance ? 'var(--warning-bg)' : 'var(--surface2)'};
-        border: 1px solid ${variance === 'material' ? 'var(--danger)' : variance ? 'var(--warning)' : 'var(--border)'};
+      const itemRow = document.createElement('div');
+      itemRow.style.cssText = `
+        background: var(--surface2);
+        border: 1px solid var(--border);
         border-radius: var(--radius);
-        padding: 10px 12px;
+        padding: 12px;
+        margin-bottom: 10px;
+        display: flex;
+        align-items: flex-start;
+        gap: 10px;
       `;
       
-      row.innerHTML = `
-        <div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px">${field.label}</div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:13px">
-          <div>
-            <div style="color:var(--text3);font-size:11px;margin-bottom:2px">Invoice</div>
-            <div style="font-weight:600;color:var(--text)">${invVal || '—'}</div>
-          </div>
-          <div>
-            <div style="color:var(--text3);font-size:11px;margin-bottom:2px">PO</div>
-            <div style="font-weight:600;color:${match || !matchingPO ? 'var(--text)' : 'var(--danger)'}">${poVal || '—'}</div>
+      itemRow.innerHTML = `
+        <input type="checkbox" id="${itemId}" data-po-idx="${idx}" data-po-row="${poRowIdx}" 
+          style="width:18px;height:18px;cursor:pointer;margin-top:2px;flex-shrink:0" checked>
+        <div style="flex:1">
+          <label for="${itemId}" style="display:flex;gap:8px;cursor:pointer;font-weight:600;color:var(--text);margin-bottom:8px">
+            <span>${po['Shape'] || '?'} ${po['Size'] || '?'}</span>
+          </label>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:12px;color:var(--text3)">
+            <div><span>Qty:</span> ${po['Qty'] || 0} pcs</div>
+            <div><span>Length:</span> ${po['Length Ft'] || 0}ft</div>
+            <div><span>Supplier:</span> ${po['Supplier'] || '—'}</div>
+            <div><span>Project:</span> ${po['Project'] || '—'}</div>
           </div>
         </div>
       `;
-      compRows.appendChild(row);
-    }
+      
+      compRows.appendChild(itemRow);
+    });
     
-    // Show warnings
+    // Show info banner
     const warningDiv = document.getElementById('modal-warning');
-    const warningText = document.getElementById('modal-warning-text');
+    warningDiv.style.display = 'block';
+    warningDiv.style.background = 'var(--accent-bg)';
+    warningDiv.style.borderColor = 'var(--accent-dim)';
+    warningDiv.style.color = 'var(--accent)';
+    document.getElementById('modal-warning-text').innerHTML = `<i class="ti ti-info-circle"></i> Check items to approve. Unchecked items remain on PO Log.`;
     
-    if(variances.length > 0){
-      warningDiv.style.display = 'block';
-      const matVars = variances.filter(v => v === 'material');
-      const qtyVars = variances.filter(v => v !== 'material' && v !== 'no-po');
-      let msg = '';
-      if(matVars.length > 0) msg += 'Material mismatch. ';
-      if(qtyVars.length > 0) msg += 'Qty or price difference. ';
-      if(variances.includes('no-po')) msg += 'No matching PO found. ';
-      warningText.textContent = msg + 'You can still approve.';
-    } else {
-      warningDiv.style.display = 'none';
-    }
-    
+    // Open modal
     document.getElementById('po-compare-modal').classList.add('open');
   }catch(err){
-    console.error('Error showing modal:', err);
+    console.error('Modal error:', err);
+    showToast('Error loading PO details');
   }
 }
 
@@ -1995,17 +1980,28 @@ async function approvePOMatch(){
   if(!currentPOMatch) return;
   
   try{
-    const { invItem, matchingPO, invRowIdx, poNum } = currentPOMatch;
+    const { invItem, matchingPOs, invRowIdx, poNum } = currentPOMatch;
+    
+    // Collect checked PO items
+    const checkedItems = [];
+    document.querySelectorAll('input[data-po-row]:checked').forEach(checkbox => {
+      checkedItems.push(parseInt(checkbox.dataset.poRow));
+    });
+    
+    if(checkedItems.length === 0){
+      alert('Please select at least one item to approve.');
+      return;
+    }
     
     // Call Apps Script to:
-    // 1. Delete PO line from PO Log
+    // 1. Delete selected PO lines from PO Log
     // 2. Update Invoice Inbox row: change Doc Type from "PO" to "Invoice"
     
     const payload = {
-      action: 'deletePOLineAndUpdateDocType',
+      action: 'deleteSelectedPOLinesAndUpdateDocType',
       sheetId: '1BtRJEG7IaNveaekFgY3flAO-3cJ-ysKOfxfkkpeO-U0',
-      invoiceInboxRowIdx: invRowIdx,  // Row index in Invoice Inbox
-      poLineRowIdx: matchingPO ? matchingPO._rowIdx : null  // Row index in PO Log
+      invoiceInboxRowIdx: invRowIdx,
+      poLineRowIndices: checkedItems  // Array of row indices to delete
     };
     
     const resp = await fetch(WRITE_SCRIPT_URL, {
@@ -2020,7 +2016,8 @@ async function approvePOMatch(){
       // Refresh inventory and reconciliation
       await loadInventory();
       await loadPOReconciliation();
-      alert('✓ PO reconciliation complete. PO line deleted, invoice moved to inventory.');
+      const itemCount = checkedItems.length;
+      alert(`✓ ${itemCount} item(s) reconciled. Moved to inventory.${checkedItems.length < matchingPOs.length ? '\n\nRemaining items stay on PO Log as open.' : ''}`);
     } else {
       alert('Error: ' + (result.error || 'Unknown error'));
     }
