@@ -1039,14 +1039,14 @@ async function syncAll(manual=false){
       // Strip header row — GViz returns it as data when parsedNumHeaders:0
       const inboxDataRows=inboxRows.filter(r=>r&&r[0]&&r[0]!=='Supplier'&&(r[5]||r[4]));
       console.log('Inbox statuses:', inboxDataRows.map(r=>r[16]));
-      inboxItems=inboxDataRows.filter(r=>r&&r[0]&&(!r[16]||r[16].toString().trim().toLowerCase()!=='imported')&&(r[6]||r[4])&&!confirmedInboxInvoices.has((r[1]||r[2]||'').trim())).map((r,i)=>{
+      inboxItems=inboxDataRows.filter(r=>r&&r[0]&&(!r[16]||r[16].toString().trim().toLowerCase()!=='imported')&&(r[6]||r[4])&&!confirmedInboxInvoices.has(String(r[1]||r[2]||'').trim())).map((r,i)=>{
         // Row index in sheet: header=row1, data starts row2
         // inboxDataRows index is 0-based, so sheet row = index+2
         const actualRowIdx=inboxDataRows.indexOf(r)+2; // +1 for header row, +1 for 1-based
         console.log('inbox item rowIdx:',actualRowIdx,'supplier:',r[0],'status:',r[16]);
         return {
         _rowIdx:actualRowIdx,
-        supplier:r[0]||'',invoiceNum:r[1]||'',poNum:r[2]||'',invoiceDate:r[3]||'',
+        supplier:String(r[0]||''),invoiceNum:String(r[1]||''),poNum:String(r[2]||''),invoiceDate:r[3]||'',
         docType:r[4]||'Invoice',shape:r[5]||'',size:r[6]||'',qty:parseInt(r[7])||1,
         lenFt:parseFloat(r[8])||null,lenIn:parseInt(r[9])||null,
         weightLbs:parseFloat(r[10])||null,costPerLb:parseFloat(r[11])||null,
@@ -3196,7 +3196,7 @@ async function commitInboxReview(){
   // ATOMIC MODEL: All items were assigned, so entire invoice is confirmed
   const confirmedRowIndices=new Set(allIndices);
   inboxItems=inboxItems.filter(i=>!confirmedRowIndices.has(i._rowIdx));
-  confirmedInboxInvoices.add(invoiceNum||currentInboxGroup?.poNum||''); // Block GViz cache from restoring this invoice
+  confirmedInboxInvoices.add(String(invoiceNum||currentInboxGroup?.poNum||'')); // Block GViz cache from restoring this invoice
 
   // In atomic model, invoice is fully done — no remaining items
   currentInboxGroup=null;
