@@ -1085,6 +1085,7 @@ async function syncAll(manual=false){
     renderInboxSection();
     renderPoSection();
   }catch(e){
+    console.error('syncAll failed:',e.message,e.stack);
     setSyncUI('err','sync failed');
     document.getElementById('sheets-status').className='status-pill s-err';
     document.getElementById('sheets-status').textContent='Sync failed — check API key and sheet sharing (must be Editor).';
