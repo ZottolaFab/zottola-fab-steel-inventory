@@ -2029,8 +2029,10 @@ async function approvePOMatch(){
   try{
     const { invItem, matchingPOs, invRowIdx, poNum } = currentPOMatch;
     
-    // Collect checked PO items with their received quantities
+    // Collect checked PO items with their received quantities, and build the
+    // corresponding Inventory rows for whatever quantity was actually received.
     const reconciliationData = [];
+    const newInventoryItems = [];
     document.querySelectorAll('input[data-po-row]:checked').forEach(checkbox => {
       const idx = checkbox.dataset.poIdx;
       const poRowIdx = parseInt(checkbox.dataset.poRow);
@@ -2043,6 +2045,41 @@ async function approvePOMatch(){
         qtyReceived: qtyReceived,
         qtyRemaining: poQty - qtyReceived
       });
+
+      if(qtyReceived > 0){
+        const po = matchingPOs[parseInt(idx)];
+        if(po){
+          const poWeight = parseFloat(po['Weight Lbs']) || 0;
+          const poCost = parseFloat(po['Total Cost']) || 0;
+          const poFuel = parseFloat(po['Fuel Surcharge']) || 0;
+          const ratio = poQty > 0 ? (qtyReceived / poQty) : 1;
+          newInventoryItems.push({
+            id: 'ZFC'+Date.now()+Math.random().toString(36).slice(2,5),
+            location: 'Unassigned',
+            shape: po['Shape'] || '',
+            size: po['Size'] || '',
+            wPerFt: null,
+            qty: qtyReceived,
+            qtyRemaining: qtyReceived,
+            lenFt: po['Length Ft'] || null,
+            lenIn: po['Length In'] || null,
+            totalWeight: poWeight ? Math.round(poWeight*ratio*100)/100 : null,
+            costPerLb: po['Cost Per Lb'] || null,
+            totalCost: poCost ? Math.round(poCost*ratio*100)/100 : null,
+            fuelSurcharge: poFuel ? Math.round(poFuel*ratio*100)/100 : null,
+            projectOrStock: po['Project'] || '',
+            docType: 'Invoice',
+            supplier: po['Supplier'] || invItem['Supplier'] || '',
+            invoiceNum: invItem['Invoice #'] || '',
+            poNum: po['PO #'] || poNum || '',
+            invoiceDate: invItem['Invoice Date'] || po['PO Date'] || '',
+            grade: po['Grade'] || '',
+            heatNumber: po['Heat #'] || '',
+            remarks: po['Remarks'] || '',
+            added: new Date().toISOString()
+          });
+        }
+      }
     });
     
     if(reconciliationData.length === 0){
@@ -2079,10 +2116,14 @@ async function approvePOMatch(){
     const result = await callReconcile();
 
     if(result.success){
+      if(newInventoryItems.length > 0){
+        newInventoryItems.forEach(i => inventory.push(i));
+        await writeInventoryToSheet();
+      }
       closePOCompareModal();
       await syncAll(false);
       await loadPOReconciliation();
-      alert(`✓ ${reconciliationData.length} item(s) reconciled. ${reconciliationData.filter(r => r.qtyRemaining > 0).length} item(s) remain open on PO Log.`);
+      alert(`✓ ${reconciliationData.length} item(s) reconciled. ${newInventoryItems.length} item(s) added to Inventory (location: Unassigned — reassign when you know where it landed). ${reconciliationData.filter(r => r.qtyRemaining > 0).length} item(s) remain open on PO Log.`);
     } else {
       alert('Error: ' + (result.error || 'Unknown error'));
     }
