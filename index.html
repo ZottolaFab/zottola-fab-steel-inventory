@@ -1000,6 +1000,20 @@ async function readTabGViz(tab){
   }
 }
 
+// Reads a tab and returns rows as objects keyed by header name (header row = row 1, data starts row 2).
+// Used by the PO reconciliation screens, which expect row['Column Name'] access plus a stable _rowIdx.
+async function readSheetData(tab){
+  const rows=await readTabViaScript(tab);
+  if(!rows||!rows.length) return [];
+  const headers=rows[0];
+  return rows.slice(1).map((r,i)=>{
+    const obj={};
+    headers.forEach((h,ci)=>{obj[h]=r[ci]!==undefined&&r[ci]!==null?r[ci]:'';});
+    obj._rowIdx=i+2; // +1 for header row, +1 for 1-based sheet rows
+    return obj;
+  });
+}
+
 async function syncAll(manual=false){
   if(manual) setSyncUI('syncing','syncing…');
   try{
@@ -1827,7 +1841,7 @@ let currentPOMatch = null; // Track current modal data
 
 async function loadPOReconciliation(){
   try{
-    setSyncStatus('syncing');
+    setSyncUI('syncing','loading reconciliation…');
     // Read Invoice Inbox (columns: Supplier, Invoice #, PO #, Invoice Date, Doc Type, Shape, Size, Qty, Length Ft, Length In, Weight Lbs, Cost Per Lb, Total Cost, Grade, Heat #, Remarks, Status, Project, Fuel Surcharge, _rowIdx)
     const inboxData = await readSheetData('Invoice Inbox');
     // Read PO Log (columns: similar)
@@ -1842,7 +1856,7 @@ async function loadPOReconciliation(){
     if(pendingInvoices.length === 0){
       reconcileList.innerHTML = '';
       reconcileEmpty.style.display = 'block';
-      setSyncStatus('ok');
+      setSyncUI('ok','nothing pending');
       return;
     }
     
@@ -1888,14 +1902,15 @@ async function loadPOReconciliation(){
       `;
       reconcileList.appendChild(card);
     }
-    setSyncStatus('ok');
+    setSyncUI('ok','reconciliation loaded');
   }catch(err){
     console.error('PO Reconciliation error:', err);
-    setSyncStatus('err');
+    setSyncUI('err','reconciliation failed');
   }
 }
 
 async function showPOCompareModal(invRowIdx){
+  invRowIdx=parseInt(invRowIdx,10);
   try{
     const inboxData = await readSheetData('Invoice Inbox');
     const poLogData = await readSheetData('PO Log');
@@ -1989,7 +2004,7 @@ async function showPOCompareModal(invRowIdx){
     document.getElementById('po-compare-modal').classList.add('open');
   }catch(err){
     console.error('Modal error:', err);
-    showToast('Error loading PO details');
+    toast('Error loading PO details','danger');
   }
 }
 
@@ -2052,7 +2067,7 @@ async function approvePOMatch(){
     
     if(result.success){
       closePOCompareModal();
-      await loadInventory();
+      await syncAll(false);
       await loadPOReconciliation();
       alert(`✓ ${reconciliationData.length} item(s) reconciled. ${reconciliationData.filter(r => r.qtyRemaining > 0).length} item(s) remain open on PO Log.`);
     } else {
