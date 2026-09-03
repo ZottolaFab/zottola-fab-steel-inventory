@@ -2057,14 +2057,27 @@ async function approvePOMatch(){
       invoiceInboxRowIdx: invRowIdx,
       reconciliationData: reconciliationData
     };
-    
-    const resp = await fetch(WRITE_SCRIPT_URL, {
-      method: 'POST',
-      body: JSON.stringify(payload)
-    });
-    
-    const result = await resp.json();
-    
+
+    async function callReconcile(_retry){
+      const resp = await fetch(WRITE_SCRIPT_URL, {
+        method: 'POST',
+        redirect: 'follow',
+        credentials: 'omit',
+        headers: {'Content-Type':'text/plain'},
+        body: JSON.stringify(payload)
+      });
+      if(!resp.ok){throw new Error('HTTP '+resp.status);}
+      const result = await resp.json();
+      // {status:'ok'} means the POST got redirected into doGet instead of doPost — transient, retry once
+      if(result.status==='ok'&&!result.success){
+        if(!_retry){console.warn('reconcilePOWithQty hit doGet instead of doPost — retrying');return await callReconcile(true);}
+        throw new Error('Still hitting doGet after retry — try again in a moment');
+      }
+      return result;
+    }
+
+    const result = await callReconcile();
+
     if(result.success){
       closePOCompareModal();
       await syncAll(false);
