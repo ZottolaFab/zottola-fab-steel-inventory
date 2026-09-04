@@ -929,7 +929,7 @@ function sheetsUpdate(tab,range,values){
 // Row formats
 const CONSUMABLES_HEADER=['Date','Supplier','Invoice #','Part #','Description','Machine','Qty','Unit Price','Total Cost','Project','Remarks','Entered By'];
 const INBOX_HEADER=['Supplier','Invoice #','PO #','Invoice Date','Doc Type','Shape','Size','Qty','Length Ft','Length In','Weight Lbs','Cost Per Lb','Total Cost','Grade','Heat #','Remarks','Status','Project','Fuel Surcharge'];
-const INV_HEADER=['ID','Location','Shape','Size','Wt/ft','Qty','Qty Remaining','Len Ft','Len In','Total Wt (lbs)','Cost/lb','Total Cost','Fuel Surcharge','Adjusted Cost/lb','Project/Stock','Doc Type','Status','Supplier','Invoice #','PO #','Invoice Date','Grade','Heat #','Remarks','Added','Edited'];
+const INV_HEADER=['ID','Location','Shape','Size','Wt/ft','Qty','Qty Remaining','Len Ft','Len In','Total Wt (lbs)','Cost/lb','Total Cost','Fuel Surcharge','Adjusted Cost/lb','Project/Stock','Doc Type','Status','Supplier','Invoice #','PO #','Invoice Date','Grade','Heat #','Remarks','Added','Edited','Promise Date'];
 const LOG_HEADER=['ID','Date','Time','Job','Shape','Size','Location','Qty Used','Qty Remaining','Length','Remarks'];
 const LOC_HEADER=['ID','Name','Description'];
 const TYPE_HEADER=['ID','Name','Wt/ft','Category'];
@@ -939,8 +939,8 @@ function calcAdjCostPerLb(i){
   const total=(parseFloat(i.totalCost)||0)+(parseFloat(i.fuelSurcharge)||0);
   return total&&i.totalWeight?(total/i.totalWeight).toFixed(4):'';
 }
-function invToRow(i){const adjTotal=Math.round(((parseFloat(i.totalCost)||0)+(parseFloat(i.fuelSurcharge)||0))*100)/100;return[i.id,i.location,i.shape,i.size,i.wPerFt||'',i.qty,i.qtyRemaining,i.lenFt||'',i.lenIn||'',i.totalWeight||'',i.costPerLb||'',adjTotal||'',i.fuelSurcharge||'',calcAdjCostPerLb(i),i.projectOrStock||'',i.docType||'',i.docType==='PO'?'On Order':'Received',i.supplier||'',i.invoiceNum||'',i.poNum||'',i.invoiceDate||'',i.grade||'',i.heatNumber||'',i.remarks||'',i.added,i.edited||''];}
-function rowToInv(r){return{id:r[0],location:r[1],shape:r[2],size:r[3],wPerFt:r[4]?parseFloat(r[4]):null,qty:parseInt(r[5])||0,qtyRemaining:parseInt(r[6])||0,lenFt:r[7]?parseFloat(r[7]):null,lenIn:r[8]?parseFloat(r[8]):null,totalWeight:r[9]?parseFloat(r[9]):null,costPerLb:r[10]||null,totalCost:r[11]?parseFloat(r[11]):null,fuelSurcharge:r[12]?parseFloat(r[12]):null,adjCostPerLb:r[13]||null,projectOrStock:r[14]||'',docType:r[15]||'',status:r[16]||'',supplier:r[17]||'',invoiceNum:r[18]||'',poNum:r[19]||'',invoiceDate:r[20]||'',grade:r[21]||'',heatNumber:r[22]||'',remarks:r[23]||'',added:r[24]||new Date().toISOString(),edited:r[25]||''};}
+function invToRow(i){const adjTotal=Math.round(((parseFloat(i.totalCost)||0)+(parseFloat(i.fuelSurcharge)||0))*100)/100;return[i.id,i.location,i.shape,i.size,i.wPerFt||'',i.qty,i.qtyRemaining,i.lenFt||'',i.lenIn||'',i.totalWeight||'',i.costPerLb||'',adjTotal||'',i.fuelSurcharge||'',calcAdjCostPerLb(i),i.projectOrStock||'',i.docType||'',i.docType==='PO'?'On Order':'Received',i.supplier||'',i.invoiceNum||'',i.poNum||'',i.invoiceDate||'',i.grade||'',i.heatNumber||'',i.remarks||'',i.added,i.edited||'',i.promiseDate||''];}
+function rowToInv(r){return{id:r[0],location:r[1],shape:r[2],size:r[3],wPerFt:r[4]?parseFloat(r[4]):null,qty:parseInt(r[5])||0,qtyRemaining:parseInt(r[6])||0,lenFt:r[7]?parseFloat(r[7]):null,lenIn:r[8]?parseFloat(r[8]):null,totalWeight:r[9]?parseFloat(r[9]):null,costPerLb:r[10]||null,totalCost:r[11]?parseFloat(r[11]):null,fuelSurcharge:r[12]?parseFloat(r[12]):null,adjCostPerLb:r[13]||null,projectOrStock:r[14]||'',docType:r[15]||'',status:r[16]||'',supplier:r[17]||'',invoiceNum:r[18]||'',poNum:r[19]||'',invoiceDate:r[20]||'',grade:r[21]||'',heatNumber:r[22]||'',remarks:r[23]||'',added:r[24]||new Date().toISOString(),edited:r[25]||'',promiseDate:r[26]||''};}
 function logToRow(e){const d=new Date(e.time);return[e.id,d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}),d.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'}),e.job||'',e.shape,e.size||'',e.location,e.qtyUsed,e.qtyRemaining,fmtLen(e.lenFt,e.lenIn),e.remarks||''];}
 function locToRow(l){return[l.id,l.name,l.desc||''];}
 function typeToRow(t){return[t.id,t.name,t.wft||'',t.category||''];}
@@ -1193,6 +1193,62 @@ function findDuplicates(newEntries){
     if(match) dupes.push({entry:e, existing:match});
   });
   return dupes;
+}
+
+// Creates or updates the "On Order" Inventory placeholder row for a PO line item once it has
+// a project assigned. Matched by PO#+Shape+Size so re-running (e.g. re-assigning) updates in place
+// instead of creating duplicates. Does NOT write to the sheet — caller must call writeInventoryToSheet().
+function syncOnOrderInventoryRow(poItem){
+  if(!poItem||!poItem.project) return;
+  let match=inventory.find(i=>i.docType==='PO'&&i.poNum===poItem.poNum&&i.shape===poItem.shape&&i.size===poItem.size);
+  if(!match){
+    match={id:'ZFC'+Date.now()+Math.random().toString(36).slice(2,5),added:new Date().toISOString()};
+    inventory.unshift(match);
+  }
+  match.location=match.location||'Unassigned';
+  match.shape=poItem.shape||'';
+  match.size=poItem.size||'';
+  match.wPerFt=null;
+  match.qty=poItem.qty||0;
+  match.qtyRemaining=poItem.qty||0;
+  match.lenFt=poItem.lenFt||null;
+  match.lenIn=poItem.lenIn||null;
+  match.totalWeight=poItem.weightLbs||null;
+  match.costPerLb=poItem.costPerLb||null;
+  match.totalCost=poItem.totalCost||null;
+  match.fuelSurcharge=poItem._fuelSurcharge||0;
+  match.projectOrStock=poItem.project;
+  match.docType='PO';
+  match.supplier=poItem.supplier||'';
+  match.poNum=poItem.poNum||'';
+  match.invoiceDate=poItem.poDate||'';
+  match.grade=poItem.grade||'';
+  match.heatNumber=poItem.heat||'';
+  match.remarks=poItem.remarks||'';
+  match.promiseDate=poItem.promiseDate||'';
+  match.edited=new Date().toISOString();
+}
+// Removes all On Order placeholder rows for a PO number (used when a PO is closed/received).
+// Does NOT write to the sheet — caller must call writeInventoryToSheet().
+function removeOnOrderInventoryForPO(poNum){
+  inventory=inventory.filter(i=>!(i.docType==='PO'&&i.poNum===poNum));
+}
+// Returns a signed day count between today and a YYYY-MM-DD date string, or null if no date given.
+function daysUntilDate(dateStr){
+  if(!dateStr) return null;
+  const target=new Date(dateStr+'T00:00:00');
+  if(isNaN(target)) return null;
+  const today=new Date();
+  today.setHours(0,0,0,0);
+  return Math.round((target-today)/86400000);
+}
+// Human-readable countdown label for a promise date, or '' if no date set.
+function formatDaysRemaining(dateStr){
+  const d=daysUntilDate(dateStr);
+  if(d===null) return '';
+  if(d>0) return d+' day'+(d!==1?'s':'')+' left';
+  if(d===0) return 'Due today';
+  return 'Overdue by '+Math.abs(d)+' day'+(Math.abs(d)!==1?'s':'');
 }
 
 async function writeInventoryToSheet(){
@@ -1700,6 +1756,7 @@ function renderInventory(){
         ${ls?`<span class="meta-chip">${ls} ea.</span>`:''}
         <span class="meta-chip">${new Date(item.added).toLocaleDateString()}</span>
         ${item.edited?`<span class="meta-chip edited">edited</span>`:''}${isPO?`<span class="meta-chip" style="background:#1e3a8a;color:#60a5fa;border:1px solid #0369a1;font-weight:600"><i class="ti ti-alert-circle" style="font-size:10px;margin-right:2px"></i>On Order</span>`:`<span class="meta-chip" style="color:var(--success)">Received</span>`}
+        ${isPO&&item.promiseDate?`<span class="meta-chip" style="background:${daysUntilDate(item.promiseDate)<0?'#7f1d1d':daysUntilDate(item.promiseDate)<=2?'#78350f':'var(--surface3)'};color:${daysUntilDate(item.promiseDate)<0?'#fca5a5':daysUntilDate(item.promiseDate)<=2?'#fcd34d':'var(--text2)'};font-weight:600"><i class="ti ti-truck-delivery" style="font-size:10px;margin-right:2px"></i>${formatDaysRemaining(item.promiseDate)}</span>`:''}
       </div>
       <div class="inv-meta" style="margin-top:2px">
         ${item.supplier?`<span class="meta-chip" style="color:var(--text2)">${item.supplier}</span>`:''}
@@ -1749,6 +1806,7 @@ function renderInventoryFiltered(filtered){
         ${ls?`<span class="meta-chip">${ls} ea.</span>`:''}
         <span class="meta-chip">${new Date(item.added).toLocaleDateString()}</span>
         ${item.edited?`<span class="meta-chip edited">edited</span>`:''}${isPO?`<span class="meta-chip" style="background:#1e3a8a;color:#60a5fa;border:1px solid #0369a1;font-weight:600"><i class="ti ti-alert-circle" style="font-size:10px;margin-right:2px"></i>On Order</span>`:`<span class="meta-chip" style="color:var(--success)">Received</span>`}
+        ${isPO&&item.promiseDate?`<span class="meta-chip" style="background:${daysUntilDate(item.promiseDate)<0?'#7f1d1d':daysUntilDate(item.promiseDate)<=2?'#78350f':'var(--surface3)'};color:${daysUntilDate(item.promiseDate)<0?'#fca5a5':daysUntilDate(item.promiseDate)<=2?'#fcd34d':'var(--text2)'};font-weight:600"><i class="ti ti-truck-delivery" style="font-size:10px;margin-right:2px"></i>${formatDaysRemaining(item.promiseDate)}</span>`:''}
       </div>
       <div class="inv-meta" style="margin-top:2px">
         ${item.supplier?`<span class="meta-chip" style="color:var(--text2)">${item.supplier}</span>`:''}
@@ -2033,51 +2091,65 @@ async function approvePOMatch(){
     // corresponding Inventory rows for whatever quantity was actually received.
     const reconciliationData = [];
     const newInventoryItems = [];
+    let onOrderInventoryChanged = false;
     document.querySelectorAll('input[data-po-row]:checked').forEach(checkbox => {
       const idx = checkbox.dataset.poIdx;
       const poRowIdx = parseInt(checkbox.dataset.poRow);
       const qtyInput = document.getElementById(`po-qty-${idx}`);
       const qtyReceived = parseInt(qtyInput?.value) || 0;
       const poQty = parseInt(qtyInput?.dataset.poQty) || 0;
+      const remainingQty = poQty - qtyReceived;
+      const po = matchingPOs[parseInt(idx)];
       
       reconciliationData.push({
         poRowIdx: poRowIdx,
         qtyReceived: qtyReceived,
-        qtyRemaining: poQty - qtyReceived
+        qtyRemaining: remainingQty
       });
 
-      if(qtyReceived > 0){
-        const po = matchingPOs[parseInt(idx)];
-        if(po){
-          const poWeight = parseFloat(po['Weight Lbs']) || 0;
-          const poCost = parseFloat(po['Total Cost']) || 0;
-          const poFuel = parseFloat(po['Fuel Surcharge']) || 0;
-          const ratio = poQty > 0 ? (qtyReceived / poQty) : 1;
-          newInventoryItems.push({
-            id: 'ZFC'+Date.now()+Math.random().toString(36).slice(2,5),
-            location: 'Unassigned',
-            shape: po['Shape'] || '',
-            size: po['Size'] || '',
-            wPerFt: null,
-            qty: qtyReceived,
-            qtyRemaining: qtyReceived,
-            lenFt: po['Length Ft'] || null,
-            lenIn: po['Length In'] || null,
-            totalWeight: poWeight ? Math.round(poWeight*ratio*100)/100 : null,
-            costPerLb: po['Cost Per Lb'] || null,
-            totalCost: poCost ? Math.round(poCost*ratio*100)/100 : null,
-            fuelSurcharge: poFuel ? Math.round(poFuel*ratio*100)/100 : null,
-            projectOrStock: po['Project'] || '',
-            docType: 'Invoice',
-            supplier: po['Supplier'] || invItem['Supplier'] || '',
-            invoiceNum: invItem['Invoice #'] || '',
-            poNum: po['PO #'] || poNum || '',
-            invoiceDate: invItem['Invoice Date'] || po['PO Date'] || '',
-            grade: po['Grade'] || '',
-            heatNumber: po['Heat #'] || '',
-            remarks: po['Remarks'] || '',
-            added: new Date().toISOString()
-          });
+      if(qtyReceived > 0 && po){
+        const poWeight = parseFloat(po['Weight Lbs']) || 0;
+        const poCost = parseFloat(po['Total Cost']) || 0;
+        const poFuel = parseFloat(po['Fuel Surcharge']) || 0;
+        const ratio = poQty > 0 ? (qtyReceived / poQty) : 1;
+        newInventoryItems.push({
+          id: 'ZFC'+Date.now()+Math.random().toString(36).slice(2,5),
+          location: 'Unassigned',
+          shape: po['Shape'] || '',
+          size: po['Size'] || '',
+          wPerFt: null,
+          qty: qtyReceived,
+          qtyRemaining: qtyReceived,
+          lenFt: po['Length Ft'] || null,
+          lenIn: po['Length In'] || null,
+          totalWeight: poWeight ? Math.round(poWeight*ratio*100)/100 : null,
+          costPerLb: po['Cost Per Lb'] || null,
+          totalCost: poCost ? Math.round(poCost*ratio*100)/100 : null,
+          fuelSurcharge: poFuel ? Math.round(poFuel*ratio*100)/100 : null,
+          projectOrStock: po['Project'] || '',
+          docType: 'Invoice',
+          supplier: po['Supplier'] || invItem['Supplier'] || '',
+          invoiceNum: invItem['Invoice #'] || '',
+          poNum: po['PO #'] || poNum || '',
+          invoiceDate: invItem['Invoice Date'] || po['PO Date'] || '',
+          grade: po['Grade'] || '',
+          heatNumber: po['Heat #'] || '',
+          remarks: po['Remarks'] || '',
+          added: new Date().toISOString()
+        });
+      }
+
+      // Mirror the PO Log qty change onto the matching On Order Inventory placeholder, if one exists
+      if(po){
+        const onOrderMatch = inventory.find(inv => inv.docType==='PO' && inv.poNum===(po['PO #']||poNum) && inv.shape===po['Shape'] && inv.size===po['Size']);
+        if(onOrderMatch){
+          if(remainingQty > 0){
+            onOrderMatch.qty = remainingQty;
+            onOrderMatch.qtyRemaining = remainingQty;
+          } else {
+            inventory = inventory.filter(inv => inv !== onOrderMatch);
+          }
+          onOrderInventoryChanged = true;
         }
       }
     });
@@ -2116,10 +2188,8 @@ async function approvePOMatch(){
     const result = await callReconcile();
 
     if(result.success){
-      if(newInventoryItems.length > 0){
-        newInventoryItems.forEach(i => inventory.push(i));
-        await writeInventoryToSheet();
-      }
+      if(newInventoryItems.length > 0) newInventoryItems.forEach(i => inventory.push(i));
+      if(newInventoryItems.length > 0 || onOrderInventoryChanged) await writeInventoryToSheet();
       closePOCompareModal();
       await syncAll(false);
       await loadPOReconciliation();
@@ -2683,11 +2753,17 @@ function renderPoSection(){
     // Show project summary
     const projSet=[...new Set(g.items.map(i=>i.project||'').filter(Boolean))];
     const projLabel=projSet.length?projSet.join(', '):'No project assigned';
+    // Soonest promise date among this PO's line items drives the countdown badge
+    const promiseDays=g.items.map(i=>daysUntilDate(i.promiseDate)).filter(d=>d!==null);
+    const soonest=promiseDays.length?Math.min(...promiseDays):null;
+    const countdownLabel=soonest!==null?formatDaysRemaining(g.items.find(i=>daysUntilDate(i.promiseDate)===soonest).promiseDate):'';
+    const countdownColor=soonest===null?'':(soonest<0?'var(--danger)':soonest<=2?'var(--warning)':'var(--text3)');
     return '<div style="background:var(--surface);border:1px solid rgba(96,165,250,0.3);border-radius:12px;overflow:hidden">'+
     '<div style="padding:12px 14px;display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--border)">'+
     '<div style="flex:1;min-width:0">'+
     '<div style="font-size:13px;font-weight:600">'+g.supplier+' — PO# '+(g.poNum||'—')+'</div>'+
     '<div style="font-size:11px;color:var(--text3);margin-top:2px">'+dispDate+' · '+g.items.length+' item'+(g.items.length!==1?'s':'')+' · <span style="color:#60a5fa">'+projLabel+'</span></div>'+
+    (countdownLabel?'<div style="font-size:11px;color:'+countdownColor+';margin-top:2px;font-weight:600"><i class="ti ti-truck-delivery"></i> '+countdownLabel+'</div>':'')+
     '</div>'+
     '<div style="text-align:right;flex-shrink:0">'+
     '<div style="font-size:13px;font-weight:600;color:#60a5fa">$'+g.totalCost.toLocaleString('en-US',{minimumFractionDigits:2})+'</div>'+
@@ -2702,13 +2778,13 @@ function renderPoSection(){
 }
 
 async function writePOToSheet(){
-  const header=['Supplier','Invoice #','PO #','PO Date','Doc Type','Shape','Size','Qty','Length Ft','Length In','Weight Lbs','Cost Per Lb','Total Cost','Grade','Heat #','Remarks','Status','Project','Fuel Surcharge'];
+  const header=['Supplier','Invoice #','PO #','PO Date','Doc Type','Shape','Size','Qty','Length Ft','Length In','Weight Lbs','Cost Per Lb','Total Cost','Grade','Heat #','Remarks','Status','Project','Fuel Surcharge','Promise Date'];
   const rows=[header,...poItems.map(i=>[
-    i.supplier||'',i.poNum||'',i.poNum||'',i.poDate||'','PO',
+    i.supplier||'','',i.poNum||'',i.poDate||'','PO',
     i.shape||'',i.size||'',i.qty||'',i.lenFt||'',i.lenIn||'',
     i.weightLbs||'',i.costPerLb||'',i.totalCost||'',
     i.grade||'',i.heat||'',i.remarks||'',
-    i.status||'Open',i.project||'',i._fuelSurcharge||''
+    i.status||'Open',i.project||'',i._fuelSurcharge||'',i.promiseDate||''
   ])];
   return await scriptWrite('writeSheet',{tab:TABS.po,rows});
 }
@@ -2748,11 +2824,13 @@ async function markPOReceived(groupIdx){
   if(!conf)return;
   const rowIndices=g.items.map(i=>i._rowIdx);
   const remaining=poItems.filter(i=>!rowIndices.includes(i._rowIdx));
-  const header=['Supplier','Invoice #','PO #','PO Date','Doc Type','Shape','Size','Qty','Length Ft','Length In','Weight Lbs','Cost Per Lb','Total Cost','Grade','Heat #','Remarks','Status','Project','Fuel Surcharge'];
-  const rows=[header,...remaining.map(i=>[i.supplier,i.poNum||'',i.poNum||'',i.poDate||'','PO',i.shape||'',i.size||'',i.qty||'',i.lenFt||'',i.lenIn||'',i.weightLbs||'',i.costPerLb||'',i.totalCost||'',i.grade||'',i.heat||'',i.remarks||'',i.status||'Open',i.project||'',i._fuelSurcharge||''])];
+  const header=['Supplier','Invoice #','PO #','PO Date','Doc Type','Shape','Size','Qty','Length Ft','Length In','Weight Lbs','Cost Per Lb','Total Cost','Grade','Heat #','Remarks','Status','Project','Fuel Surcharge','Promise Date'];
+  const rows=[header,...remaining.map(i=>[i.supplier,'',i.poNum||'',i.poDate||'','PO',i.shape||'',i.size||'',i.qty||'',i.lenFt||'',i.lenIn||'',i.weightLbs||'',i.costPerLb||'',i.totalCost||'',i.grade||'',i.heat||'',i.remarks||'',i.status||'Open',i.project||'',i._fuelSurcharge||'',i.promiseDate||''])];
   const result=await scriptWrite('writeSheet',{tab:TABS.po,rows});
   if(result&&result.success){
     poItems=remaining;
+    removeOnOrderInventoryForPO(g.poNum);
+    await writeInventoryToSheet();
     toast('PO closed and removed','success');
     renderPoSection();
   }else{toast('Failed to close PO','danger');}
@@ -2914,6 +2992,12 @@ function renderInboxReviewItems(){
               oninput="setInboxItemByRowKey(${rowKey},'_project',this.value);validateInboxCompleteness()">
           </div>
         </div>
+        ${item.docType==='PO'?`<div style="grid-column:1/-1">
+          <div style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:3px">Promise / delivery date</div>
+          <input type="date" id="inbx-promise-${rowKey}" value="${item._promiseDate||item.promiseDate||''}"
+            style="width:100%;padding:8px 10px;font-size:13px;border:1px solid var(--border2);border-radius:var(--radius);background:var(--surface2);color:var(--text);font-family:var(--font)"
+            onchange="setInboxItemByRowKey(${rowKey},'_promiseDate',this.value)">
+        </div>`:''}
         ${item.remarks?`<div style="grid-column:1/-1;font-size:11px;color:var(--text3);background:var(--surface3);border-radius:6px;padding:6px 8px">${item.remarks}</div>`:''}
       </div>`;
     list.appendChild(div);
@@ -3142,6 +3226,7 @@ async function commitInboxReview(){
     invoiceDate:item.invoiceDate,
     grade:item.grade||'',
     heatNumber:item.heat||'',
+    promiseDate:item._promiseDate||item.promiseDate||'',
     remarks:[
       item._project.trim().toUpperCase()!=='STOCK'?'Project: '+item._project.trim():'STOCK',
       item.grade||'',
@@ -3201,18 +3286,23 @@ async function commitInboxReview(){
   }
 
   // Write PO entries to PO Log (new POs from inbox)
+  let onOrderChanged=false;
   if(poEntries.length){
     const newPoItems=poEntries.map(e=>({
       supplier:e.supplier,poNum:e.poNum||e.invoiceNum,poDate:e.invoiceDate,
       shape:e.shape,size:e.size,qty:e.qty,lenFt:e.lenFt,lenIn:e.lenIn,
       weightLbs:e.totalWeight,costPerLb:e.costPerLb,totalCost:e.totalCost,
-      grade:e.grade,heat:e.heatNumber,remarks:e.remarks,
+      grade:e.grade,heat:e.heatNumber,remarks:e.remarks,promiseDate:e.promiseDate||'',
       status:'Open',project:e.projectOrStock,_fuelSurcharge:e.fuelSurcharge||0,
       _rowIdx:poItems.length+2
     }));
-    newPoItems.forEach(p=>poItems.push(p));
+    newPoItems.forEach(p=>{
+      poItems.push(p);
+      if(p.project){syncOnOrderInventoryRow(p);onOrderChanged=true;}
+    });
     await writePOToSheet();
     renderPoSection();
+    if(onOrderChanged) await writeInventoryToSheet();
   }
 
   // If this was a PO review (assigning projects to existing PO items), update poItems and save
@@ -3220,7 +3310,11 @@ async function commitInboxReview(){
     const updatedPONums=new Set(assigned.map(i=>i.poNum||i.invoiceNum));
     assigned.forEach(a=>{
       const match=poItems.find(p=>p.poNum===( a.poNum||a.invoiceNum)&&p.size===a.size);
-      if(match) match.project=a._project;
+      if(match){
+        match.project=a._project;
+        if(a._promiseDate) match.promiseDate=a._promiseDate;
+        if(match.project){syncOnOrderInventoryRow(match);onOrderChanged=true;}
+      }
     });
     await writePOToSheet();
     renderPoSection();
@@ -3228,6 +3322,8 @@ async function commitInboxReview(){
     // Close matched PO if user selected one (before returning from PO review)
     if(window._closePOOnConfirm){
       const poNumToClose=window._closePOOnConfirm;
+      removeOnOrderInventoryForPO(poNumToClose);
+      onOrderChanged=true;
       poItems=poItems.filter(i=>i.poNum!==poNumToClose);
       await writePOToSheet();
       renderPoSection();
@@ -3237,6 +3333,7 @@ async function commitInboxReview(){
       toast('Projects assigned to PO','success');
     }
     
+    if(onOrderChanged) await writeInventoryToSheet();
     currentInboxGroup=null;
     document.getElementById('import-inbox-review').style.display='none';
     document.getElementById('import-selector-view').style.display='block';
