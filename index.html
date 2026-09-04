@@ -288,8 +288,9 @@ h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,
   <div class="summary-bar" id="summary-bar"></div>
   <div style="padding:0 0 12px 0">
     <input type="text" id="inv-search" placeholder="Search: material, project, supplier, location…"
-      style="width:100%;padding:10px 12px;font-size:13px;border:1px solid var(--border2);border-radius:var(--radius);background:var(--surface2);color:var(--text);font-family:var(--font)"
+      style="width:100%;padding:10px 12px;font-size:13px;border:2px solid #c2410c;border-radius:var(--radius);background:#f97316;color:#000;font-weight:600;font-family:var(--font)"
       oninput="filterInventory()">
+    <style>#inv-search::placeholder{color:#3a1a05;opacity:0.75}</style>
   </div>
   <div class="action-bar">
     <button class="btn btn-success btn-sm" style="flex:1" onclick="backupNow()"><i class="ti ti-cloud-download"></i> Backup now</button>
@@ -1251,6 +1252,14 @@ function formatDaysRemaining(dateStr){
   return 'Overdue by '+Math.abs(d)+' day'+(Math.abs(d)!==1?'s':'');
 }
 
+// Short display date (e.g. "Sep 12") for a YYYY-MM-DD string, for pairing next to the countdown.
+function formatShortDate(dateStr){
+  if(!dateStr) return '';
+  const d=new Date(dateStr+'T00:00:00');
+  if(isNaN(d)) return dateStr;
+  return d.toLocaleDateString('en-US',{month:'short',day:'numeric'});
+}
+
 async function writeInventoryToSheet(){
   lastInventoryWrite=Date.now();
   const rows=[INV_HEADER,...inventory.map(invToRow)];
@@ -1756,7 +1765,7 @@ function renderInventory(){
         ${ls?`<span class="meta-chip">${ls} ea.</span>`:''}
         <span class="meta-chip">${new Date(item.added).toLocaleDateString()}</span>
         ${item.edited?`<span class="meta-chip edited">edited</span>`:''}${isPO?`<span class="meta-chip" style="background:#1e3a8a;color:#60a5fa;border:1px solid #0369a1;font-weight:600"><i class="ti ti-alert-circle" style="font-size:10px;margin-right:2px"></i>On Order</span>`:`<span class="meta-chip" style="color:var(--success)">Received</span>`}
-        ${isPO&&item.promiseDate?`<span class="meta-chip" style="background:${daysUntilDate(item.promiseDate)<0?'#7f1d1d':daysUntilDate(item.promiseDate)<=2?'#78350f':'var(--surface3)'};color:${daysUntilDate(item.promiseDate)<0?'#fca5a5':daysUntilDate(item.promiseDate)<=2?'#fcd34d':'var(--text2)'};font-weight:600"><i class="ti ti-truck-delivery" style="font-size:10px;margin-right:2px"></i>${formatDaysRemaining(item.promiseDate)}</span>`:''}
+        ${isPO&&item.promiseDate?`<span class="meta-chip" style="background:${daysUntilDate(item.promiseDate)<0?'#7f1d1d':daysUntilDate(item.promiseDate)<=2?'#78350f':'var(--surface3)'};color:${daysUntilDate(item.promiseDate)<0?'#fca5a5':daysUntilDate(item.promiseDate)<=2?'#fcd34d':'var(--text2)'};font-weight:600"><i class="ti ti-truck-delivery" style="font-size:10px;margin-right:2px"></i>${formatShortDate(item.promiseDate)} · ${formatDaysRemaining(item.promiseDate)}</span>`:''}
       </div>
       <div class="inv-meta" style="margin-top:2px">
         ${item.supplier?`<span class="meta-chip" style="color:var(--text2)">${item.supplier}</span>`:''}
@@ -1806,7 +1815,7 @@ function renderInventoryFiltered(filtered){
         ${ls?`<span class="meta-chip">${ls} ea.</span>`:''}
         <span class="meta-chip">${new Date(item.added).toLocaleDateString()}</span>
         ${item.edited?`<span class="meta-chip edited">edited</span>`:''}${isPO?`<span class="meta-chip" style="background:#1e3a8a;color:#60a5fa;border:1px solid #0369a1;font-weight:600"><i class="ti ti-alert-circle" style="font-size:10px;margin-right:2px"></i>On Order</span>`:`<span class="meta-chip" style="color:var(--success)">Received</span>`}
-        ${isPO&&item.promiseDate?`<span class="meta-chip" style="background:${daysUntilDate(item.promiseDate)<0?'#7f1d1d':daysUntilDate(item.promiseDate)<=2?'#78350f':'var(--surface3)'};color:${daysUntilDate(item.promiseDate)<0?'#fca5a5':daysUntilDate(item.promiseDate)<=2?'#fcd34d':'var(--text2)'};font-weight:600"><i class="ti ti-truck-delivery" style="font-size:10px;margin-right:2px"></i>${formatDaysRemaining(item.promiseDate)}</span>`:''}
+        ${isPO&&item.promiseDate?`<span class="meta-chip" style="background:${daysUntilDate(item.promiseDate)<0?'#7f1d1d':daysUntilDate(item.promiseDate)<=2?'#78350f':'var(--surface3)'};color:${daysUntilDate(item.promiseDate)<0?'#fca5a5':daysUntilDate(item.promiseDate)<=2?'#fcd34d':'var(--text2)'};font-weight:600"><i class="ti ti-truck-delivery" style="font-size:10px;margin-right:2px"></i>${formatShortDate(item.promiseDate)} · ${formatDaysRemaining(item.promiseDate)}</span>`:''}
       </div>
       <div class="inv-meta" style="margin-top:2px">
         ${item.supplier?`<span class="meta-chip" style="color:var(--text2)">${item.supplier}</span>`:''}
@@ -2869,6 +2878,12 @@ function isFreightRow(item){
     (item.docType && item.docType.toString().toLowerCase()==='freight');
 }
 
+function applyPromiseDateToAll(val){
+  const groupItems=currentInboxGroup?currentInboxGroup.items:inboxItems;
+  groupItems.forEach(item=>{ if(!isFreightRow(item)) item._promiseDate=val; });
+  renderInboxReviewItems();
+}
+
 function renderInboxReviewItems(){
   const groupItems=currentInboxGroup?currentInboxGroup.items:inboxItems;
   // Ensure projects are loaded before rendering dropdowns
@@ -2896,6 +2911,14 @@ function renderInboxReviewItems(){
     hdr.innerHTML=`<div style="font-size:14px;font-weight:600">${g.supplier} — ${g.invoiceNum}</div>
       <div style="font-size:11px;color:var(--text3);margin-top:3px">${g.invoiceDate}${g.poNum?' · <span style="color:#fff;font-weight:700">PO# '+g.poNum+'</span>':''} · ${g.items.length} total items · $${g.totalCost.toLocaleString('en-US',{minimumFractionDigits:2})}</div>`;
     list.appendChild(hdr);
+    // One promise date for the whole PO — applies to all lines, each line can still be edited individually below
+    if(g.docType==='PO'){
+      const dateBanner=document.createElement('div');
+      dateBanner.style.cssText='background:rgba(96,165,250,0.08);border:1px solid rgba(96,165,250,0.3);border-radius:10px;padding:10px 12px;margin-bottom:4px';
+      dateBanner.innerHTML='<div style="font-size:11px;font-weight:600;color:#60a5fa;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px"><i class="ti ti-truck-delivery"></i> Promise / delivery date (applies to all lines — edit individual lines below if needed)</div>'+
+        '<input type="date" id="inbx-promise-all" style="width:100%;padding:8px 10px;font-size:13px;border:1px solid rgba(96,165,250,0.4);border-radius:var(--radius);background:var(--surface2);color:var(--text);color-scheme:dark;font-family:var(--font)" onchange="applyPromiseDateToAll(this.value)">';
+      list.appendChild(dateBanner);
+    }
     // Check for matching open PO from same supplier
     if(g.docType!=='PO'&&poItems&&poItems.length){
       const matchingPOs=[...new Set(poItems.filter(p=>p.supplier===g.supplier).map(p=>p.poNum))];
@@ -2995,7 +3018,7 @@ function renderInboxReviewItems(){
         ${item.docType==='PO'?`<div style="grid-column:1/-1">
           <div style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:3px">Promise / delivery date</div>
           <input type="date" id="inbx-promise-${rowKey}" value="${item._promiseDate||item.promiseDate||''}"
-            style="width:100%;padding:8px 10px;font-size:13px;border:1px solid var(--border2);border-radius:var(--radius);background:var(--surface2);color:var(--text);font-family:var(--font)"
+            style="width:100%;padding:8px 10px;font-size:13px;border:1px solid var(--border2);border-radius:var(--radius);background:var(--surface2);color:var(--text);color-scheme:dark;font-family:var(--font)"
             onchange="setInboxItemByRowKey(${rowKey},'_promiseDate',this.value)">
         </div>`:''}
         ${item.remarks?`<div style="grid-column:1/-1;font-size:11px;color:var(--text3);background:var(--surface3);border-radius:6px;padding:6px 8px">${item.remarks}</div>`:''}
