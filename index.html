@@ -941,7 +941,7 @@ function calcAdjCostPerLb(i){
   return total&&i.totalWeight?(total/i.totalWeight).toFixed(4):'';
 }
 function invToRow(i){const adjTotal=Math.round(((parseFloat(i.totalCost)||0)+(parseFloat(i.fuelSurcharge)||0))*100)/100;return[i.id,i.location,i.shape,i.size,i.wPerFt||'',i.qty,i.qtyRemaining,i.lenFt||'',i.lenIn||'',i.totalWeight||'',i.costPerLb||'',adjTotal||'',i.fuelSurcharge||'',calcAdjCostPerLb(i),i.projectOrStock||'',i.docType||'',i.docType==='PO'?'On Order':'Received',i.supplier||'',i.invoiceNum||'',i.poNum||'',i.invoiceDate||'',i.grade||'',i.heatNumber||'',i.remarks||'',i.added,i.edited||'',i.promiseDate||''];}
-function rowToInv(r){return{id:r[0],location:r[1],shape:r[2],size:r[3],wPerFt:r[4]?parseFloat(r[4]):null,qty:parseInt(r[5])||0,qtyRemaining:parseInt(r[6])||0,lenFt:r[7]?parseFloat(r[7]):null,lenIn:r[8]?parseFloat(r[8]):null,totalWeight:r[9]?parseFloat(r[9]):null,costPerLb:r[10]||null,totalCost:r[11]?parseFloat(r[11]):null,fuelSurcharge:r[12]?parseFloat(r[12]):null,adjCostPerLb:r[13]||null,projectOrStock:r[14]||'',docType:r[15]||'',status:r[16]||'',supplier:r[17]||'',invoiceNum:r[18]||'',poNum:r[19]||'',invoiceDate:r[20]||'',grade:r[21]||'',heatNumber:r[22]||'',remarks:r[23]||'',added:r[24]||new Date().toISOString(),edited:r[25]||'',promiseDate:r[26]||''};}
+function rowToInv(r){return{id:r[0],location:r[1],shape:String(r[2]||''),size:String(r[3]||''),wPerFt:r[4]?parseFloat(r[4]):null,qty:parseInt(r[5])||0,qtyRemaining:parseInt(r[6])||0,lenFt:r[7]?parseFloat(r[7]):null,lenIn:r[8]?parseFloat(r[8]):null,totalWeight:r[9]?parseFloat(r[9]):null,costPerLb:r[10]||null,totalCost:r[11]?parseFloat(r[11]):null,fuelSurcharge:r[12]?parseFloat(r[12]):null,adjCostPerLb:r[13]||null,projectOrStock:r[14]||'',docType:r[15]||'',status:r[16]||'',supplier:r[17]||'',invoiceNum:r[18]||'',poNum:String(r[19]||''),invoiceDate:r[20]||'',grade:r[21]||'',heatNumber:r[22]||'',remarks:r[23]||'',added:r[24]||new Date().toISOString(),edited:r[25]||'',promiseDate:r[26]||''};}
 function logToRow(e){const d=new Date(e.time);return[e.id,d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}),d.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'}),e.job||'',e.shape,e.size||'',e.location,e.qtyUsed,e.qtyRemaining,fmtLen(e.lenFt,e.lenIn),e.remarks||''];}
 function locToRow(l){return[l.id,l.name,l.desc||''];}
 function typeToRow(t){return[t.id,t.name,t.wft||'',t.category||''];}
@@ -1079,13 +1079,14 @@ async function syncAll(manual=false){
       const poDataRows=poRows.filter(r=>r[0]&&r[0]!=='Supplier');
       poItems=poDataRows.filter(r=>r&&r[0]&&(!r[16]||r[16].toString().trim().toLowerCase()!=='received')).map((r,i)=>({
         _rowIdx:i+2,
-        supplier:r[0]||'',poNum:r[2]||'',poDate:r[3]||'',docType:'PO',
-        shape:r[5]||'',size:r[6]||'',qty:parseInt(r[7])||1,
+        supplier:String(r[0]||''),poNum:String(r[2]||''),poDate:r[3]||'',docType:'PO',
+        shape:String(r[5]||''),size:String(r[6]||''),qty:parseInt(r[7])||1,
         lenFt:parseFloat(r[8])||null,lenIn:parseInt(r[9])||null,
         weightLbs:parseFloat(r[10])||null,costPerLb:parseFloat(r[11])||null,
         totalCost:parseFloat(r[12])||null,grade:r[13]||'',heat:r[14]||'',remarks:r[15]||'',
         status:r[16]||'Open',project:r[17]||'',
         _fuelSurcharge:parseFloat(r[18])||0,
+        promiseDate:r[19]||'',
         _included:true,_project:r[17]||''
       }));
     }
@@ -1201,7 +1202,7 @@ function findDuplicates(newEntries){
 // instead of creating duplicates. Does NOT write to the sheet — caller must call writeInventoryToSheet().
 function syncOnOrderInventoryRow(poItem){
   if(!poItem||!poItem.project) return;
-  let match=inventory.find(i=>i.docType==='PO'&&i.poNum===poItem.poNum&&i.shape===poItem.shape&&i.size===poItem.size);
+  let match=inventory.find(i=>i.docType==='PO'&&String(i.poNum)===String(poItem.poNum)&&String(i.shape)===String(poItem.shape)&&String(i.size)===String(poItem.size));
   if(!match){
     match={id:'ZFC'+Date.now()+Math.random().toString(36).slice(2,5),added:new Date().toISOString()};
     inventory.unshift(match);
@@ -1232,7 +1233,7 @@ function syncOnOrderInventoryRow(poItem){
 // Removes all On Order placeholder rows for a PO number (used when a PO is closed/received).
 // Does NOT write to the sheet — caller must call writeInventoryToSheet().
 function removeOnOrderInventoryForPO(poNum){
-  inventory=inventory.filter(i=>!(i.docType==='PO'&&i.poNum===poNum));
+  inventory=inventory.filter(i=>!(i.docType==='PO'&&String(i.poNum)===String(poNum)));
 }
 // Returns a signed day count between today and a YYYY-MM-DD date string, or null if no date given.
 function daysUntilDate(dateStr){
@@ -2150,7 +2151,7 @@ async function approvePOMatch(){
 
       // Mirror the PO Log qty change onto the matching On Order Inventory placeholder, if one exists
       if(po){
-        const onOrderMatch = inventory.find(inv => inv.docType==='PO' && inv.poNum===(po['PO #']||poNum) && inv.shape===po['Shape'] && inv.size===po['Size']);
+        const onOrderMatch = inventory.find(inv => inv.docType==='PO' && String(inv.poNum)===String(po['PO #']||poNum) && String(inv.shape)===String(po['Shape']) && String(inv.size)===String(po['Size']));
         if(onOrderMatch){
           if(remainingQty > 0){
             onOrderMatch.qty = remainingQty;
@@ -2753,7 +2754,7 @@ function renderPoSection(){
     groups[key].items.push(item);
     groups[key].totalCost+=parseFloat(item.totalCost)||0;
   });
-  const gArr=Object.values(groups);
+  const gArr=Object.values(groups).filter(g=>g.items.some(i=>!i.project));
   poCount.textContent=gArr.length+' PO'+(gArr.length!==1?'s':'')+' open';
   poList.innerHTML=gArr.map((g,gi)=>{
     // Format date cleanly
@@ -2799,6 +2800,7 @@ async function writePOToSheet(){
 }
 
 function reviewPOGroup(groupIdx){
+  window._bulkPromiseDate='';
   const g=window._poGroups[groupIdx];
   if(!g)return;
   // Build a fake inboxGroup from PO items so the review screen can handle them
@@ -2858,6 +2860,7 @@ function setPOCloseOnConfirm(doClose){
 }
 
 function reviewInboxGroup(groupIdx){
+  window._bulkPromiseDate='';
   const groups=groupInboxByInvoice().filter(g=>g.pendingCount>0);
   currentInboxGroup=groups[groupIdx];
   document.getElementById('import-selector-view').style.display='none';
@@ -2879,6 +2882,7 @@ function isFreightRow(item){
 }
 
 function applyPromiseDateToAll(val){
+  window._bulkPromiseDate=val;
   const groupItems=currentInboxGroup?currentInboxGroup.items:inboxItems;
   groupItems.forEach(item=>{ if(!isFreightRow(item)) item._promiseDate=val; });
   renderInboxReviewItems();
@@ -2900,7 +2904,7 @@ function renderInboxReviewItems(){
   // Update commit button label based on doc type
   const isPOReview=currentInboxGroup&&currentInboxGroup.docType==='PO';
   const commitBtn=document.getElementById('inbox-commit-btn');
-  if(commitBtn) commitBtn.innerHTML='<i class="ti ti-'+(isPOReview?'clipboard-list':'database-import')+'"></i> Confirm all &amp; add to '+(isPOReview?'PO Log':'inventory');
+  if(commitBtn) commitBtn.innerHTML='<i class="ti ti-'+(isPOReview?'clipboard-list':'database-import')+'"></i> Confirm all &amp; add to inventory';
   const list=document.getElementById('inbox-review-items');
   list.innerHTML='';
   // Show group header
@@ -2916,7 +2920,7 @@ function renderInboxReviewItems(){
       const dateBanner=document.createElement('div');
       dateBanner.style.cssText='background:rgba(96,165,250,0.08);border:1px solid rgba(96,165,250,0.3);border-radius:10px;padding:10px 12px;margin-bottom:4px';
       dateBanner.innerHTML='<div style="font-size:11px;font-weight:600;color:#60a5fa;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px"><i class="ti ti-truck-delivery"></i> Promise / delivery date (applies to all lines — edit individual lines below if needed)</div>'+
-        '<input type="date" id="inbx-promise-all" style="width:100%;padding:8px 10px;font-size:13px;border:1px solid rgba(96,165,250,0.4);border-radius:var(--radius);background:var(--surface2);color:var(--text);color-scheme:dark;font-family:var(--font)" onchange="applyPromiseDateToAll(this.value)">';
+        '<input type="date" id="inbx-promise-all" value="'+(window._bulkPromiseDate||'')+'" style="width:100%;padding:8px 10px;font-size:13px;border:1px solid rgba(96,165,250,0.4);border-radius:var(--radius);background:var(--surface2);color:var(--text);color-scheme:dark;font-family:var(--font)" onchange="applyPromiseDateToAll(this.value)">';
       list.appendChild(dateBanner);
     }
     // Check for matching open PO from same supplier
@@ -3332,7 +3336,7 @@ async function commitInboxReview(){
   if(currentInboxGroup&&currentInboxGroup.docType==='PO'&&invEntries.length===0){
     const updatedPONums=new Set(assigned.map(i=>i.poNum||i.invoiceNum));
     assigned.forEach(a=>{
-      const match=poItems.find(p=>p.poNum===( a.poNum||a.invoiceNum)&&p.size===a.size);
+      const match=poItems.find(p=>String(p.poNum)===String(a.poNum||a.invoiceNum)&&String(p.size)===String(a.size));
       if(match){
         match.project=a._project;
         if(a._promiseDate) match.promiseDate=a._promiseDate;
@@ -3347,7 +3351,7 @@ async function commitInboxReview(){
       const poNumToClose=window._closePOOnConfirm;
       removeOnOrderInventoryForPO(poNumToClose);
       onOrderChanged=true;
-      poItems=poItems.filter(i=>i.poNum!==poNumToClose);
+      poItems=poItems.filter(i=>String(i.poNum)!==String(poNumToClose));
       await writePOToSheet();
       renderPoSection();
       window._closePOOnConfirm=null;
@@ -3397,14 +3401,16 @@ async function commitInboxReview(){
   // Close matched PO if user selected one
   if(window._closePOOnConfirm){
     const poNumToClose=window._closePOOnConfirm;
-    poItems=poItems.filter(i=>i.poNum!==poNumToClose);
+    poItems=poItems.filter(i=>String(i.poNum)!==String(poNumToClose));
+    removeOnOrderInventoryForPO(poNumToClose);
     await writePOToSheet();
+    await writeInventoryToSheet();
     renderPoSection();
     window._closePOOnConfirm=null;
     toast('✅ Invoice confirmed & PO# '+poNumToClose+' closed','success');
   } else {
     const isAllPO=invEntries.length===0&&poEntries.length>0;
-    toast('✅ '+(isAllPO?'PO':'Invoice')+' '+invoiceNum+' confirmed · '+confirmedCount+' items added to '+(isAllPO?'PO Log':'inventory'),'success');
+    toast('✅ '+(isAllPO?'PO':'Invoice')+' '+invoiceNum+' confirmed · '+confirmedCount+' items added to inventory','success');
   }
   // Note: no background sync — GViz cache would restore confirmed items
   // Items removed from inboxItems in memory; sheet already updated correctly
