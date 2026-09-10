@@ -653,8 +653,9 @@ h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,
   </div>
   <div style="padding:10px 14px;border-bottom:1px solid var(--border)">
     <input type="text" id="bolts-search" placeholder="Search: description, project, supplier, location…"
-      style="width:100%;padding:8px 10px;font-size:13px;border:1px solid var(--border2);border-radius:var(--radius);background:var(--surface2);color:var(--text);font-family:var(--font)"
+      style="width:100%;padding:8px 10px;font-size:13px;border:2px solid #c2410c;border-radius:var(--radius);background:#f97316;color:#000;font-weight:600;font-family:var(--font)"
       oninput="renderBoltsInventory()">
+    <style>#bolts-search::placeholder{color:#3a1a05;opacity:0.75}</style>
   </div>
   <div id="bolts-list"></div>
 </div>
@@ -1148,7 +1149,7 @@ function startAutoSync(){
 }
 
 // ── WRITE VIA APPS SCRIPT ────────────────────────────────────────────
-async function scriptWrite(action, data){
+async function scriptWrite(action, data, _retry){
   try{
     const url = WRITE_SCRIPT_URL + '?action=' + action;
     const r = await fetch(url, {
@@ -1161,10 +1162,11 @@ async function scriptWrite(action, data){
     const text = await r.text();
     console.log('scriptWrite response:', action, text.slice(0,200));
     const result = JSON.parse(text);
-    // {status:'ok'} means we hit doGet instead of doPost — that's a failure
+    // {status:'ok'} means we hit doGet instead of doPost — transient, retry once
     if(result.status==='ok'&&!result.success){
-      console.error('scriptWrite hit doGet instead of doPost — POST redirect issue');
-      return {success:false, error:'POST redirected to GET'};
+      if(!_retry){console.warn('scriptWrite hit doGet instead of doPost — retrying:',action);return await scriptWrite(action,data,true);}
+      console.error('scriptWrite failed after retry (still hitting doGet):',action);
+      return {success:false, error:'POST redirected to GET (retried once, still failing)'};
     }
     if(result.success===true||result.count>=0) return {success:true};
     console.error('scriptWrite failed:', action, result);
@@ -2328,15 +2330,26 @@ async function approvePOMatch(){
     const result = await callReconcile();
 
     if(result.success){
+      let writeFailures=[];
       if(newInventoryItems.length > 0) newInventoryItems.forEach(i => inventory.push(i));
-      if(newInventoryItems.length > 0 || onOrderInventoryChanged) await writeInventoryToSheet();
+      if(newInventoryItems.length > 0 || onOrderInventoryChanged){
+        const invResult=await writeInventoryToSheet();
+        if(!invResult||!invResult.success) writeFailures.push('Inventory');
+      }
       if(newBoltInventoryItems.length > 0) newBoltInventoryItems.forEach(b => boltsInventory.push(b));
-      if(newBoltInventoryItems.length > 0 || onOrderBoltsChanged) await writeBoltsInventoryToSheet();
+      if(newBoltInventoryItems.length > 0 || onOrderBoltsChanged){
+        const boltResult=await writeBoltsInventoryToSheet();
+        if(!boltResult||!boltResult.success) writeFailures.push('Bolts Inventory');
+      }
       closePOCompareModal();
       await syncAll(false);
       await loadPOReconciliation();
       const addedCount=newInventoryItems.length+newBoltInventoryItems.length;
-      alert(`✓ ${reconciliationData.length} item(s) reconciled. ${addedCount} item(s) added to Inventory (location: Unassigned — reassign when you know where it landed). ${reconciliationData.filter(r => r.qtyRemaining > 0).length} item(s) remain open on PO Log.`);
+      if(writeFailures.length){
+        alert(`⚠ PO Log reconciled, but writing to ${writeFailures.join(' and ')} failed — check your connection and try reconciling this item again, or verify the sheet manually.`);
+      } else {
+        alert(`✓ ${reconciliationData.length} item(s) reconciled. ${addedCount} item(s) added to Inventory (location: Unassigned — reassign when you know where it landed). ${reconciliationData.filter(r => r.qtyRemaining > 0).length} item(s) remain open on PO Log.`);
+      }
     } else {
       alert('Error: ' + (result.error || 'Unknown error'));
     }
