@@ -860,7 +860,7 @@ h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,
 // ── CONFIG ───────────────────────────────────────────────────────────
 const SHEET_ID = '1BtRJEG7IaNveaekFgY3flAO-3cJ-ysKOfxfkkpeO-U0';
 const TT_SHEET_ID = '1IAm2tRj2hTmsO7hhHhkMsCZWXGD-vJz56sbPkJEl6zg';
-const TABS = { inv: 'Inventory', log: 'Usage Log', loc: 'Locations', types: 'Material Types', inbox: 'Invoice Inbox', consumables: 'Consumables', po: 'PO Log', bolts: 'Bolts Inventory' };
+const TABS = { inv: 'Inventory', log: 'Usage Log', loc: 'Locations', types: 'Material Types', inbox: 'Invoice Inbox', consumables: 'Consumables', po: 'PO Log', bolts: 'Bolts/Fasteners' };
 const PROJ_TAB = 'Projects';
 const SYNC_INTERVAL = 60000; // 60 seconds
 // Apps Script URL handles all writes — no OAuth needed
@@ -949,10 +949,32 @@ const CONSUMABLES_HEADER=['Date','Supplier','Invoice #','Part #','Description','
 const INBOX_HEADER=['Supplier','Invoice #','PO #','Invoice Date','Doc Type','Shape','Size','Qty','Length Ft','Length In','Weight Lbs','Cost Per Lb','Total Cost','Grade','Heat #','Remarks','Status','Project','Fuel Surcharge'];
 const INV_HEADER=['ID','Location','Shape','Size','Wt/ft','Qty','Qty Remaining','Len Ft','Len In','Total Wt (lbs)','Cost/lb','Total Cost','Fuel Surcharge','Adjusted Cost/lb','Project/Stock','Doc Type','Status','Supplier','Invoice #','PO #','Invoice Date','Grade','Heat #','Remarks','Added','Edited','Promise Date'];
 
-// Bolts/Fasteners Inventory — same pattern as steel Inventory, but Description+Unit replace Shape+Length+Weight
-const BOLT_INV_HEADER=['ID','Location','Description','Size','Unit','Qty','Qty Remaining','Cost Per Unit','Total Cost','Fuel Surcharge','Adjusted Cost/Unit','Project/Stock','Doc Type','Status','Supplier','Invoice #','PO #','Invoice Date','Grade','Remarks','Added','Edited','Promise Date'];
-function boltToRow(b){const adjTotal=Math.round(((parseFloat(b.totalCost)||0)+(parseFloat(b.fuelSurcharge)||0))*100)/100;const adjCostPerUnit=b.qty?Math.round((adjTotal/b.qty)*10000)/10000:(b.costPerUnit||'');return[b.id,b.location,b.description,b.size,b.unit||'',b.qty,b.qtyRemaining,b.costPerUnit||'',adjTotal||'',b.fuelSurcharge||'',adjCostPerUnit,b.projectOrStock||'',b.docType||'',b.docType==='PO'?'On Order':'Received',b.supplier||'',b.invoiceNum||'',b.poNum||'',b.invoiceDate||'',b.grade||'',b.remarks||'',b.added,b.edited||'',b.promiseDate||''];}
-function rowToBolt(r){return{id:r[0],location:r[1],description:r[2],size:r[3],unit:r[4]||'',qty:parseInt(r[5])||0,qtyRemaining:parseInt(r[6])||0,costPerUnit:r[7]||null,totalCost:r[8]?parseFloat(r[8]):null,fuelSurcharge:r[9]?parseFloat(r[9]):null,adjCostPerUnit:r[10]||null,projectOrStock:r[11]||'',docType:r[12]||'',status:r[13]||'',supplier:r[14]||'',invoiceNum:r[15]||'',poNum:String(r[16]||''),invoiceDate:r[17]||'',grade:r[18]||'',remarks:r[19]||'',added:r[20]||new Date().toISOString(),edited:r[21]||'',promiseDate:r[22]||''};}
+// Bolts/Fasteners Inventory — matches the EXISTING sheet's 16-column layout (Supplier..Remarks),
+// extended with 9 trailing columns for On Order/lifecycle tracking, same pattern as Invoice Inbox/PO Log.
+const BOLT_INV_HEADER=['Supplier','Invoice #','PO #','PO Date','Doc Type','Description','Size','Qty','Unit','Weight Lbs','Cost Per Unit','Total Cost','Grade','Project','Status','Remarks','ID','Location','Qty Remaining','Fuel Surcharge','Adjusted Cost/Unit','Invoice Date','Added','Edited','Promise Date'];
+function boltToRow(b){
+  const adjTotal=Math.round(((parseFloat(b.totalCost)||0)+(parseFloat(b.fuelSurcharge)||0))*100)/100;
+  const adjCostPerUnit=b.qty?Math.round((adjTotal/b.qty)*10000)/10000:(b.costPerUnit||'');
+  return[
+    b.supplier||'',b.invoiceNum||'',b.poNum||'',b.poDate||'',b.docType||'',
+    b.description||'',b.size||'',b.qty,b.unit||'',b.weightLbs||'',
+    b.costPerUnit||'',adjTotal||'',b.grade||'',b.projectOrStock||'',
+    b.docType==='PO'?'On Order':'Received',b.remarks||'',
+    b.id,b.location,b.qtyRemaining,b.fuelSurcharge||'',adjCostPerUnit,
+    b.invoiceDate||'',b.added,b.edited||'',b.promiseDate||''
+  ];
+}
+function rowToBolt(r,i){
+  return{
+    supplier:r[0]||'',invoiceNum:r[1]||'',poNum:String(r[2]||''),poDate:r[3]||'',docType:r[4]||'',
+    description:r[5]||'',size:r[6]||'',qty:parseInt(r[7])||0,unit:r[8]||'',weightLbs:r[9]?parseFloat(r[9]):null,
+    costPerUnit:r[10]||null,totalCost:r[11]?parseFloat(r[11]):null,grade:r[12]||'',projectOrStock:r[13]||'',
+    status:r[14]||'',remarks:r[15]||'',
+    id:r[16]||('ZFB-legacy-'+i),location:r[17]||'Unassigned',qtyRemaining:r[18]!==undefined&&r[18]!==''?parseInt(r[18]):(parseInt(r[7])||0),
+    fuelSurcharge:r[19]?parseFloat(r[19]):null,adjCostPerUnit:r[20]||null,invoiceDate:r[21]||'',
+    added:r[22]||new Date().toISOString(),edited:r[23]||'',promiseDate:r[24]||''
+  };
+}
 async function writeBoltsInventoryToSheet(){
   lastBoltsInventoryWrite=Date.now();
   const rows=[BOLT_INV_HEADER,...boltsInventory.map(boltToRow)];
@@ -1053,7 +1075,7 @@ async function syncAll(manual=false){
 
     // Read Bolts Inventory — same pattern as steel Inventory
     const boltRows=await readTabViaScript(TABS.bolts);
-    if(boltRows!==null && (Date.now()-lastBoltsInventoryWrite)>300000) boltsInventory=boltRows.filter(r=>r&&r[0]&&r[0]!=='ID').map(rowToBolt);
+    if(boltRows!==null && (Date.now()-lastBoltsInventoryWrite)>300000) boltsInventory=boltRows.filter(r=>r&&r[0]&&r[0]!=='Supplier').map((r,i)=>rowToBolt(r,i));
 
     // Read usage log
     const logRows=await readTab(TABS.log);
@@ -1280,6 +1302,7 @@ function syncOnOrderBoltsRow(poItem){
   match.unit=poItem.unit||'';
   match.qty=poItem.qty||0;
   match.qtyRemaining=poItem.qty||0;
+  match.weightLbs=poItem.weightLbs||null;
   match.costPerUnit=poItem.costPerLb||null;
   match.totalCost=poItem.totalCost||null;
   match.fuelSurcharge=poItem._fuelSurcharge||0;
@@ -1287,7 +1310,7 @@ function syncOnOrderBoltsRow(poItem){
   match.docType='PO';
   match.supplier=poItem.supplier||'';
   match.poNum=poItem.poNum||'';
-  match.invoiceDate=poItem.poDate||'';
+  match.poDate=poItem.poDate||'';
   match.grade=poItem.grade||'';
   match.remarks=poItem.remarks||'';
   match.promiseDate=poItem.promiseDate||'';
@@ -2246,6 +2269,7 @@ async function approvePOMatch(){
       } else if(qtyReceived > 0 && po && isBolts){
         const poCost = parseFloat(po['Total Cost']) || 0;
         const poFuel = parseFloat(po['Fuel Surcharge']) || 0;
+        const poWeight = parseFloat(po['Weight Lbs']) || 0;
         const ratio = poQty > 0 ? (qtyReceived / poQty) : 1;
         newBoltInventoryItems.push({
           id: 'ZFB'+Date.now()+Math.random().toString(36).slice(2,5),
@@ -2255,6 +2279,7 @@ async function approvePOMatch(){
           unit: po['Unit'] || '',
           qty: qtyReceived,
           qtyRemaining: qtyReceived,
+          weightLbs: poWeight ? Math.round(poWeight*ratio*100)/100 : null,
           costPerUnit: po['Cost Per Lb'] || null,
           totalCost: poCost ? Math.round(poCost*ratio*100)/100 : null,
           fuelSurcharge: poFuel ? Math.round(poFuel*ratio*100)/100 : null,
@@ -3433,7 +3458,7 @@ async function commitInboxReview(){
   const invEntries=invEntriesAll.filter(e=>e.materialType!=='Bolts');
   const boltInvEntries=invEntriesAll.filter(e=>e.materialType==='Bolts').map(e=>({
     id:e.id,location:e.location||'Unassigned',description:e.shape||'',size:e.size||'',unit:e.unit||'',
-    qty:e.qty,qtyRemaining:e.qty,costPerUnit:e.costPerLb||null,totalCost:e.totalCost||null,
+    qty:e.qty,qtyRemaining:e.qty,weightLbs:e.totalWeight||null,costPerUnit:e.costPerLb||null,totalCost:e.totalCost||null,
     fuelSurcharge:e.fuelSurcharge||0,projectOrStock:e.projectOrStock||'',docType:e.docType||'Invoice',
     supplier:e.supplier||'',invoiceNum:e.invoiceNum||'',poNum:e.poNum||'',invoiceDate:e.invoiceDate||'',
     grade:e.grade||'',remarks:e.remarks||'',promiseDate:e.promiseDate||'',added:new Date().toISOString()
@@ -3473,7 +3498,7 @@ async function commitInboxReview(){
   if(boltInvEntries.length){
     const freshBoltRows=await readTabViaScript(TABS.bolts);
     if(freshBoltRows&&freshBoltRows.length){
-      boltsInventory=freshBoltRows.filter(r=>r&&r[0]&&r[0]!=='ID').map(rowToBolt);
+      boltsInventory=freshBoltRows.filter(r=>r&&r[0]&&r[0]!=='Supplier').map((r,i)=>rowToBolt(r,i));
     }
     boltInvEntries.forEach(b=>boltsInventory.unshift(b));
     const boltResult=await writeBoltsInventoryToSheet();
