@@ -279,6 +279,7 @@ h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,
   <button class="tab" onclick="switchTab('log',this)">Usage log</button>
   <button class="tab" onclick="switchTab('lists',this)">Locations &amp; types</button>
   <button class="tab" onclick="switchTab('consumables',this)"><i class="ti ti-tool" style="font-size:13px"></i> Consumables</button>
+  <button class="tab" onclick="switchTab('bolts',this)"><i class="ti ti-bolt" style="font-size:13px"></i> Bolts</button>
   <button class="tab" onclick="switchTab('backups',this)">Backups</button>
   <button class="tab" onclick="switchTab('settings',this)">Settings</button>
 </div>
@@ -644,6 +645,20 @@ h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,
   <div id="consumables-list"></div>
 </div>
 
+<!-- BOLTS INVENTORY -->
+<div class="content pad0" id="tab-bolts" style="display:none">
+  <div style="padding:14px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;z-index:5;background:var(--surface)">
+    <span style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:0.06em">Bolts &amp; Fasteners</span>
+    <span style="font-size:11px;color:var(--text3)" id="bolts-count"></span>
+  </div>
+  <div style="padding:10px 14px;border-bottom:1px solid var(--border)">
+    <input type="text" id="bolts-search" placeholder="Search: description, project, supplier, location…"
+      style="width:100%;padding:8px 10px;font-size:13px;border:1px solid var(--border2);border-radius:var(--radius);background:var(--surface2);color:var(--text);font-family:var(--font)"
+      oninput="renderBoltsInventory()">
+  </div>
+  <div id="bolts-list"></div>
+</div>
+
 <!-- ADD CONSUMABLE MODAL -->
 <div class="modal-bg" id="modal-consumable" onclick="closeModal('modal-consumable')">
   <div class="modal" onclick="event.stopPropagation()">
@@ -844,7 +859,7 @@ h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,
 // ── CONFIG ───────────────────────────────────────────────────────────
 const SHEET_ID = '1BtRJEG7IaNveaekFgY3flAO-3cJ-ysKOfxfkkpeO-U0';
 const TT_SHEET_ID = '1IAm2tRj2hTmsO7hhHhkMsCZWXGD-vJz56sbPkJEl6zg';
-const TABS = { inv: 'Inventory', log: 'Usage Log', loc: 'Locations', types: 'Material Types', inbox: 'Invoice Inbox', consumables: 'Consumables', po: 'PO Log' };
+const TABS = { inv: 'Inventory', log: 'Usage Log', loc: 'Locations', types: 'Material Types', inbox: 'Invoice Inbox', consumables: 'Consumables', po: 'PO Log', bolts: 'Bolts Inventory' };
 const PROJ_TAB = 'Projects';
 const SYNC_INTERVAL = 60000; // 60 seconds
 // Apps Script URL handles all writes — no OAuth needed
@@ -871,13 +886,14 @@ const SG=[{label:'W Shapes',keys:Object.keys(AISC).filter(k=>k.match(/^W\d/)&&!k
   {label:'Angles — Unequal Leg',keys:['L2-1/2x2x3/16','L2-1/2x2x1/4','L2-1/2x2x5/16','L3x2x3/16','L3x2x1/4','L3x2x5/16','L3x2x3/8','L3x2-1/2x1/4','L3x2-1/2x5/16','L3x2-1/2x3/8','L3-1/2x2-1/2x1/4','L3-1/2x2-1/2x5/16','L3-1/2x2-1/2x3/8','L3-1/2x3x1/4','L3-1/2x3x5/16','L3-1/2x3x3/8','L4x3x1/4','L4x3x5/16','L4x3x3/8','L4x3x1/2','L4x3-1/2x1/4','L4x3-1/2x5/16','L4x3-1/2x3/8','L4x3-1/2x1/2','L5x3x1/4','L5x3x5/16','L5x3x3/8','L5x3x1/2','L5x3-1/2x1/4','L5x3-1/2x5/16','L5x3-1/2x3/8','L5x3-1/2x1/2','L6x3-1/2x5/16','L6x3-1/2x3/8','L6x3-1/2x1/2','L6x4x5/16','L6x4x3/8','L6x4x1/2','L6x4x5/8','L7x4x3/8','L7x4x1/2','L7x4x3/4','L8x4x1/2','L8x4x5/8','L8x6x1/2','L8x6x5/8','L8x6x3/4']},{label:'WT Shapes',keys:Object.keys(AISC).filter(k=>k.startsWith('WT'))},{label:'Pipe STD',keys:Object.keys(AISC).filter(k=>k.includes('STD'))},{label:'Pipe XS',keys:Object.keys(AISC).filter(k=>k.endsWith(' XS'))},{label:'Pipe XXS',keys:Object.keys(AISC).filter(k=>k.includes('XXS'))}];
 
 // ── STATE ────────────────────────────────────────────────────────────
-let inventory=[],usageLog=[],locations=[],customTypes=[],projects=[],backupLog=[],inboxItems=[],consumables=[],poItems=[];
+let inventory=[],usageLog=[],locations=[],customTypes=[],projects=[],backupLog=[],inboxItems=[],consumables=[],poItems=[],boltsInventory=[];
 let cfg={apiKey:'AIzaSyAQaFH4tPD7rWgh3rvJQJlI2d4_ZTxo070'};
 let pendingUseItemId=null,npField=null,npVal='',clearBackupDL=false;
 let kbShift=false,kbNum=false,kbText='';
 let syncTimer=null,projTimer=null,siIdx=-1;
 let confirmedInboxInvoices=new Set(); // invoiceNums confirmed this session — GViz cache guard
 let lastInventoryWrite=0; // timestamp of last inventory write — blocks GViz cache overwrite
+let lastBoltsInventoryWrite=0;
 let sheetsReady=false;
 
 // ── PERSIST (local cache only) ───────────────────────────────────────
@@ -931,6 +947,16 @@ function sheetsUpdate(tab,range,values){
 const CONSUMABLES_HEADER=['Date','Supplier','Invoice #','Part #','Description','Machine','Qty','Unit Price','Total Cost','Project','Remarks','Entered By'];
 const INBOX_HEADER=['Supplier','Invoice #','PO #','Invoice Date','Doc Type','Shape','Size','Qty','Length Ft','Length In','Weight Lbs','Cost Per Lb','Total Cost','Grade','Heat #','Remarks','Status','Project','Fuel Surcharge'];
 const INV_HEADER=['ID','Location','Shape','Size','Wt/ft','Qty','Qty Remaining','Len Ft','Len In','Total Wt (lbs)','Cost/lb','Total Cost','Fuel Surcharge','Adjusted Cost/lb','Project/Stock','Doc Type','Status','Supplier','Invoice #','PO #','Invoice Date','Grade','Heat #','Remarks','Added','Edited','Promise Date'];
+
+// Bolts/Fasteners Inventory — same pattern as steel Inventory, but Description+Unit replace Shape+Length+Weight
+const BOLT_INV_HEADER=['ID','Location','Description','Size','Unit','Qty','Qty Remaining','Cost Per Unit','Total Cost','Fuel Surcharge','Adjusted Cost/Unit','Project/Stock','Doc Type','Status','Supplier','Invoice #','PO #','Invoice Date','Grade','Remarks','Added','Edited','Promise Date'];
+function boltToRow(b){const adjTotal=Math.round(((parseFloat(b.totalCost)||0)+(parseFloat(b.fuelSurcharge)||0))*100)/100;const adjCostPerUnit=b.qty?Math.round((adjTotal/b.qty)*10000)/10000:(b.costPerUnit||'');return[b.id,b.location,b.description,b.size,b.unit||'',b.qty,b.qtyRemaining,b.costPerUnit||'',adjTotal||'',b.fuelSurcharge||'',adjCostPerUnit,b.projectOrStock||'',b.docType||'',b.docType==='PO'?'On Order':'Received',b.supplier||'',b.invoiceNum||'',b.poNum||'',b.invoiceDate||'',b.grade||'',b.remarks||'',b.added,b.edited||'',b.promiseDate||''];}
+function rowToBolt(r){return{id:r[0],location:r[1],description:r[2],size:r[3],unit:r[4]||'',qty:parseInt(r[5])||0,qtyRemaining:parseInt(r[6])||0,costPerUnit:r[7]||null,totalCost:r[8]?parseFloat(r[8]):null,fuelSurcharge:r[9]?parseFloat(r[9]):null,adjCostPerUnit:r[10]||null,projectOrStock:r[11]||'',docType:r[12]||'',status:r[13]||'',supplier:r[14]||'',invoiceNum:r[15]||'',poNum:String(r[16]||''),invoiceDate:r[17]||'',grade:r[18]||'',remarks:r[19]||'',added:r[20]||new Date().toISOString(),edited:r[21]||'',promiseDate:r[22]||''};}
+async function writeBoltsInventoryToSheet(){
+  lastBoltsInventoryWrite=Date.now();
+  const rows=[BOLT_INV_HEADER,...boltsInventory.map(boltToRow)];
+  return await scriptWrite('writeSheet',{tab:TABS.bolts,rows});
+}
 const LOG_HEADER=['ID','Date','Time','Job','Shape','Size','Location','Qty Used','Qty Remaining','Length','Remarks'];
 const LOC_HEADER=['ID','Name','Description'];
 const TYPE_HEADER=['ID','Name','Wt/ft','Category'];
@@ -1024,6 +1050,10 @@ async function syncAll(manual=false){
     console.log('readTab Inventory rows:', invRows?invRows.length:'null');
     if(invRows!==null && (Date.now()-lastInventoryWrite)>300000) inventory=invRows.filter(r=>r&&r[0]&&r[0]!=='ID').map(rowToInv);
 
+    // Read Bolts Inventory — same pattern as steel Inventory
+    const boltRows=await readTabViaScript(TABS.bolts);
+    if(boltRows!==null && (Date.now()-lastBoltsInventoryWrite)>300000) boltsInventory=boltRows.filter(r=>r&&r[0]&&r[0]!=='ID').map(rowToBolt);
+
     // Read usage log
     const logRows=await readTab(TABS.log);
     if(logRows!==null) usageLog=logRows.map(r=>({id:r[0],time:r[1]&&r[2]?r[1]+' '+r[2]:new Date().toISOString(),job:r[3]||'',shape:r[4]||'',size:r[5]||'',location:r[6]||'',qtyUsed:parseInt(r[7])||0,qtyRemaining:parseInt(r[8])||0,length:r[9]||'',remarks:r[10]||''}));
@@ -1068,6 +1098,7 @@ async function syncAll(manual=false){
         totalCost:parseFloat(r[12])||null,grade:r[13]||'',heat:r[14]||'',remarks:r[15]||'',
         status:r[16]||'',project:r[17]||'',
         _fuelSurcharge:parseFloat(r[18])||0,
+        unit:r[19]||'',materialType:r[19]?'Bolts':'Steel',
         _included:true,_project:r[17]||'',_location:'',_imported:false
         };
       });
@@ -1087,6 +1118,7 @@ async function syncAll(manual=false){
         status:r[16]||'Open',project:r[17]||'',
         _fuelSurcharge:parseFloat(r[18])||0,
         promiseDate:r[19]||'',
+        unit:r[20]||'',materialType:r[20]?'Bolts':'Steel',
         _included:true,_project:r[17]||''
       }));
     }
@@ -1202,6 +1234,7 @@ function findDuplicates(newEntries){
 // instead of creating duplicates. Does NOT write to the sheet — caller must call writeInventoryToSheet().
 function syncOnOrderInventoryRow(poItem){
   if(!poItem||!poItem.project) return;
+  if(poItem.materialType==='Bolts'){ syncOnOrderBoltsRow(poItem); return; }
   let match=inventory.find(i=>i.docType==='PO'&&String(i.poNum)===String(poItem.poNum)&&String(i.shape)===String(poItem.shape)&&String(i.size)===String(poItem.size));
   if(!match){
     match={id:'ZFC'+Date.now()+Math.random().toString(36).slice(2,5),added:new Date().toISOString()};
@@ -1230,10 +1263,39 @@ function syncOnOrderInventoryRow(poItem){
   match.promiseDate=poItem.promiseDate||'';
   match.edited=new Date().toISOString();
 }
-// Removes all On Order placeholder rows for a PO number (used when a PO is closed/received).
-// Does NOT write to the sheet — caller must call writeInventoryToSheet().
+// Bolts equivalent of syncOnOrderInventoryRow — matched by PO#+Description+Size instead of PO#+Shape+Size.
+// Does NOT write to the sheet — caller must call writeBoltsInventoryToSheet().
+function syncOnOrderBoltsRow(poItem){
+  if(!poItem||!poItem.project) return;
+  let match=boltsInventory.find(b=>b.docType==='PO'&&String(b.poNum)===String(poItem.poNum)&&String(b.description)===String(poItem.shape)&&String(b.size)===String(poItem.size));
+  if(!match){
+    match={id:'ZFB'+Date.now()+Math.random().toString(36).slice(2,5),added:new Date().toISOString()};
+    boltsInventory.unshift(match);
+  }
+  match.location=match.location||'Unassigned';
+  match.description=poItem.shape||'';
+  match.size=poItem.size||'';
+  match.unit=poItem.unit||'';
+  match.qty=poItem.qty||0;
+  match.qtyRemaining=poItem.qty||0;
+  match.costPerUnit=poItem.costPerLb||null;
+  match.totalCost=poItem.totalCost||null;
+  match.fuelSurcharge=poItem._fuelSurcharge||0;
+  match.projectOrStock=poItem.project;
+  match.docType='PO';
+  match.supplier=poItem.supplier||'';
+  match.poNum=poItem.poNum||'';
+  match.invoiceDate=poItem.poDate||'';
+  match.grade=poItem.grade||'';
+  match.remarks=poItem.remarks||'';
+  match.promiseDate=poItem.promiseDate||'';
+  match.edited=new Date().toISOString();
+}
+// Removes all On Order placeholder rows for a PO number, in both steel and bolts Inventory
+// (used when a PO is closed/received). Does NOT write to the sheet — caller must flush both.
 function removeOnOrderInventoryForPO(poNum){
   inventory=inventory.filter(i=>!(i.docType==='PO'&&String(i.poNum)===String(poNum)));
+  boltsInventory=boltsInventory.filter(b=>!(b.docType==='PO'&&String(b.poNum)===String(poNum)));
 }
 // Returns a signed day count between today and a YYYY-MM-DD date string, or null if no date given.
 function daysUntilDate(dateStr){
@@ -1676,30 +1738,7 @@ function exportCSV(){
 function filterInventory(){
   const q=(document.getElementById('inv-search')?.value||'').toLowerCase();
   if(!q){renderInventory();return;}
-  const merged=[...inventory,...poItems.map(po=>({
-    id:po.poNum||'po-'+po._rowIdx,
-    size:po.size,
-    shape:po.shape,
-    qty:po.qty,
-    qtyRemaining:po.qty,
-    location:'On Order',
-    supplier:po.supplier,
-    poNum:po.poNum,
-    invoiceNum:null,
-    projectOrStock:po.project,
-    wPerFt:po.wPerFt,
-    totalWeight:po.weightLbs,
-    lenFt:po.lenFt,
-    lenIn:po.lenIn,
-    grade:po.grade,
-    heatNumber:po.heat,
-    remarks:po.remarks,
-    added:po.poDate||new Date().toISOString(),
-    docType:'PO',
-    _isPOItem:true,
-    _poData:po
-  }))];
-  const filtered=merged.filter(item=>{
+  const filtered=inventory.filter(item=>{
     const shape=(item.shape||'').toLowerCase();
     const size=(item.size||'').toLowerCase();
     const project=(item.projectOrStock||'').toLowerCase();
@@ -1712,35 +1751,12 @@ function filterInventory(){
 
 function renderInventory(){
   const list=document.getElementById('inv-list'),sb=document.getElementById('summary-bar');
-  // Merge inventory and PO items for display
-  const merged=[...inventory,...poItems.map(po=>({
-    id:po.poNum||'po-'+po._rowIdx,
-    size:po.size,
-    shape:po.shape,
-    qty:po.qty,
-    qtyRemaining:po.qty,
-    location:'On Order',
-    supplier:po.supplier,
-    poNum:po.poNum,
-    invoiceNum:null,
-    projectOrStock:po.project,
-    wPerFt:po.wPerFt,
-    totalWeight:po.weightLbs,
-    lenFt:po.lenFt,
-    lenIn:po.lenIn,
-    grade:po.grade,
-    heatNumber:po.heat,
-    remarks:po.remarks,
-    added:po.poDate||new Date().toISOString(),
-    docType:'PO',
-    _isPOItem:true,
-    _poData:po
-  }))];
+  const merged=inventory;
   if(!merged.length){list.innerHTML=`<div class="empty"><span class="empty-icon"><i class="ti ti-package"></i></span>${sheetsReady?'No material logged yet. Use "Add material" to get started.':'Connecting to sheet…'}</div>`;sb.innerHTML='';return;}
   const tP=inventory.reduce((a,i)=>a+i.qty,0),rP=inventory.reduce((a,i)=>a+i.qtyRemaining,0),tW=inventory.reduce((a,i)=>a+(i.totalWeight||0),0);
   sb.innerHTML=`
     <div class="stat accent"><div class="stat-val">${rP}</div><div class="stat-label">Pieces received</div></div>
-    <div class="stat"><div class="stat-val">${inventory.length+poItems.length}</div><div class="stat-label">Total entries</div></div>
+    <div class="stat"><div class="stat-val">${inventory.length}</div><div class="stat-label">Total entries</div></div>
     <div class="stat"><div class="stat-val">${tW>0?(tW/2000).toFixed(1)+' T':'—'}</div><div class="stat-label">Received wt (tons)</div></div>
     <div class="stat"><div class="stat-val">${tP-rP}</div><div class="stat-label">Pieces used</div></div>`;
   const sorted=[...merged].sort((a,b)=>a.size.localeCompare(b.size));
@@ -1791,6 +1807,81 @@ function renderInventory(){
   }).join('');
 }
 
+function renderBoltsInventory(){
+  const list=document.getElementById('bolts-list'),cnt=document.getElementById('bolts-count');
+  const q=(document.getElementById('bolts-search')?.value||'').toLowerCase();
+  if(!boltsInventory.length){
+    list.innerHTML=`<div class="empty"><span class="empty-icon"><i class="ti ti-bolt"></i></span>${sheetsReady?'No bolts/fasteners logged yet.':'Connecting to sheet…'}</div>`;
+    cnt.textContent='';return;
+  }
+  const filtered=q?boltsInventory.filter(b=>
+    (b.description||'').toLowerCase().includes(q)||
+    (b.size||'').toLowerCase().includes(q)||
+    (b.projectOrStock||'').toLowerCase().includes(q)||
+    (b.supplier||'').toLowerCase().includes(q)||
+    (b.location||'').toLowerCase().includes(q)
+  ):boltsInventory;
+  cnt.textContent=filtered.length+' entries';
+  const sorted=[...filtered].sort((a,b)=>(a.description||'').localeCompare(b.description||''));
+  list.innerHTML=sorted.map(item=>{
+    const isPO=item.docType==='PO';
+    const pct=!isPO&&item.qty>0?item.qtyRemaining/item.qty:0;
+    const bc=isPO?'badge-low':(pct===0?'badge-empty':pct<=0.2?'badge-low':'badge-ok');
+    const bl=isPO?'On Order':(pct===0?'Empty':pct<=0.2?'Low':'OK');
+    const borderCol=isPO?'#60a5fa':'var(--border)';
+    const bgCol=isPO?'rgba(96,165,250,0.08)':'transparent';
+    return `<div class="inv-item" style="border-color:${borderCol};background:${bgCol}">
+      <div class="inv-head">
+        <div class="inv-info">
+          <div class="inv-shape">${item.description||'—'}${item.size?' · '+item.size:''}</div>
+          <div class="inv-loc"><i class="ti ti-map-pin" style="font-size:11px"></i> ${item.location}</div>
+        </div>
+        <span class="inv-badge ${bc}" style="${isPO?'background:#1e3a8a;color:#60a5fa;border-color:#0369a1':''}">${bl}</span>
+      </div>
+      <div class="inv-meta">
+        ${item.unit?`<span class="meta-chip">${item.unit}</span>`:''}
+        ${item.costPerUnit?`<span class="meta-chip">$${parseFloat(item.costPerUnit).toFixed(4)}/unit</span>`:''}
+        <span class="meta-chip">${new Date(item.added).toLocaleDateString()}</span>
+        ${item.edited?`<span class="meta-chip edited">edited</span>`:''}${isPO?`<span class="meta-chip" style="background:#1e3a8a;color:#60a5fa;border:1px solid #0369a1;font-weight:600"><i class="ti ti-alert-circle" style="font-size:10px;margin-right:2px"></i>On Order</span>`:`<span class="meta-chip" style="color:var(--success)">Received</span>`}
+        ${isPO&&item.promiseDate?`<span class="meta-chip" style="background:${daysUntilDate(item.promiseDate)<0?'#7f1d1d':daysUntilDate(item.promiseDate)<=2?'#78350f':'var(--surface3)'};color:${daysUntilDate(item.promiseDate)<0?'#fca5a5':daysUntilDate(item.promiseDate)<=2?'#fcd34d':'var(--text2)'};font-weight:600"><i class="ti ti-truck-delivery" style="font-size:10px;margin-right:2px"></i>${formatShortDate(item.promiseDate)} · ${formatDaysRemaining(item.promiseDate)}</span>`:''}
+      </div>
+      <div class="inv-meta" style="margin-top:2px">
+        ${item.supplier?`<span class="meta-chip" style="color:var(--text2)">${item.supplier}</span>`:''}
+        ${item.invoiceNum?`<span class="meta-chip">Inv: ${item.invoiceNum}</span>`:''}
+        ${item.poNum?`<span class="meta-chip" style="color:#fff;font-weight:700">PO: ${item.poNum}</span>`:''}
+        ${item.projectOrStock?`<span class="meta-chip" style="color:var(--warning)">${item.projectOrStock}</span>`:''}
+      </div>
+      <div class="inv-footer">
+        <div class="qty-row">
+          <span style="font-size:12px;color:var(--text3)">${isPO?'Order':'Rem'}</span>
+          <span class="qty-val" style="${isPO?'color:#60a5fa':''}">${item.qtyRemaining}</span>
+          <span class="qty-of">/ ${item.qty} ${item.unit||'ea'}</span>
+        </div>
+        <div class="inv-actions">
+          ${!isPO?`<button class="btn btn-sm btn-icon" onclick="editBoltLocation('${item.id}')" aria-label="Edit location"><i class="ti ti-map-pin"></i></button>`:''}
+          <button class="btn btn-sm btn-icon btn-danger" onclick="deleteBoltItem('${item.id}')" aria-label="Delete"><i class="ti ti-trash"></i></button>
+        </div>
+      </div>
+      ${item.remarks?`<div class="inv-remarks-bar"><i class="ti ti-notes" style="font-size:11px;margin-top:1px;flex-shrink:0"></i> ${item.remarks}</div>`:''}
+    </div>`;
+  }).join('');
+}
+function editBoltLocation(id){
+  const item=boltsInventory.find(b=>b.id===id);
+  if(!item) return;
+  const loc=prompt('Location for '+(item.description||'this item')+':',item.location||'');
+  if(loc===null) return;
+  item.location=loc;
+  item.edited=new Date().toISOString();
+  writeBoltsInventoryToSheet().then(()=>renderBoltsInventory());
+}
+function deleteBoltItem(id){
+  const item=boltsInventory.find(b=>b.id===id);
+  if(!item) return;
+  if(!confirm('Delete '+(item.description||'this item')+' from Bolts Inventory?')) return;
+  boltsInventory=boltsInventory.filter(b=>b.id!==id);
+  writeBoltsInventoryToSheet().then(()=>renderBoltsInventory());
+}
 function renderInventoryFiltered(filtered){
   const list=document.getElementById('inv-list');
   if(!filtered.length){list.innerHTML=`<div class="empty" style="padding:30px 14px"><span class="empty-icon"><i class="ti ti-search"></i></span>No materials match your search.</div>`;return;}
@@ -2101,7 +2192,9 @@ async function approvePOMatch(){
     // corresponding Inventory rows for whatever quantity was actually received.
     const reconciliationData = [];
     const newInventoryItems = [];
+    const newBoltInventoryItems = [];
     let onOrderInventoryChanged = false;
+    let onOrderBoltsChanged = false;
     document.querySelectorAll('input[data-po-row]:checked').forEach(checkbox => {
       const idx = checkbox.dataset.poIdx;
       const poRowIdx = parseInt(checkbox.dataset.poRow);
@@ -2110,6 +2203,7 @@ async function approvePOMatch(){
       const poQty = parseInt(qtyInput?.dataset.poQty) || 0;
       const remainingQty = poQty - qtyReceived;
       const po = matchingPOs[parseInt(idx)];
+      const isBolts = po && !!po['Unit'];
       
       reconciliationData.push({
         poRowIdx: poRowIdx,
@@ -2117,7 +2211,7 @@ async function approvePOMatch(){
         qtyRemaining: remainingQty
       });
 
-      if(qtyReceived > 0 && po){
+      if(qtyReceived > 0 && po && !isBolts){
         const poWeight = parseFloat(po['Weight Lbs']) || 0;
         const poCost = parseFloat(po['Total Cost']) || 0;
         const poFuel = parseFloat(po['Fuel Surcharge']) || 0;
@@ -2147,10 +2241,35 @@ async function approvePOMatch(){
           remarks: po['Remarks'] || '',
           added: new Date().toISOString()
         });
+      } else if(qtyReceived > 0 && po && isBolts){
+        const poCost = parseFloat(po['Total Cost']) || 0;
+        const poFuel = parseFloat(po['Fuel Surcharge']) || 0;
+        const ratio = poQty > 0 ? (qtyReceived / poQty) : 1;
+        newBoltInventoryItems.push({
+          id: 'ZFB'+Date.now()+Math.random().toString(36).slice(2,5),
+          location: 'Unassigned',
+          description: po['Shape'] || '',
+          size: po['Size'] || '',
+          unit: po['Unit'] || '',
+          qty: qtyReceived,
+          qtyRemaining: qtyReceived,
+          costPerUnit: po['Cost Per Lb'] || null,
+          totalCost: poCost ? Math.round(poCost*ratio*100)/100 : null,
+          fuelSurcharge: poFuel ? Math.round(poFuel*ratio*100)/100 : null,
+          projectOrStock: po['Project'] || '',
+          docType: 'Invoice',
+          supplier: po['Supplier'] || invItem['Supplier'] || '',
+          invoiceNum: invItem['Invoice #'] || '',
+          poNum: po['PO #'] || poNum || '',
+          invoiceDate: invItem['Invoice Date'] || po['PO Date'] || '',
+          grade: po['Grade'] || '',
+          remarks: po['Remarks'] || '',
+          added: new Date().toISOString()
+        });
       }
 
-      // Mirror the PO Log qty change onto the matching On Order Inventory placeholder, if one exists
-      if(po){
+      // Mirror the PO Log qty change onto the matching On Order placeholder (steel or bolts), if one exists
+      if(po && !isBolts){
         const onOrderMatch = inventory.find(inv => inv.docType==='PO' && String(inv.poNum)===String(po['PO #']||poNum) && String(inv.shape)===String(po['Shape']) && String(inv.size)===String(po['Size']));
         if(onOrderMatch){
           if(remainingQty > 0){
@@ -2160,6 +2279,17 @@ async function approvePOMatch(){
             inventory = inventory.filter(inv => inv !== onOrderMatch);
           }
           onOrderInventoryChanged = true;
+        }
+      } else if(po && isBolts){
+        const onOrderBoltMatch = boltsInventory.find(b => b.docType==='PO' && String(b.poNum)===String(po['PO #']||poNum) && String(b.description)===String(po['Shape']) && String(b.size)===String(po['Size']));
+        if(onOrderBoltMatch){
+          if(remainingQty > 0){
+            onOrderBoltMatch.qty = remainingQty;
+            onOrderBoltMatch.qtyRemaining = remainingQty;
+          } else {
+            boltsInventory = boltsInventory.filter(b => b !== onOrderBoltMatch);
+          }
+          onOrderBoltsChanged = true;
         }
       }
     });
@@ -2200,10 +2330,13 @@ async function approvePOMatch(){
     if(result.success){
       if(newInventoryItems.length > 0) newInventoryItems.forEach(i => inventory.push(i));
       if(newInventoryItems.length > 0 || onOrderInventoryChanged) await writeInventoryToSheet();
+      if(newBoltInventoryItems.length > 0) newBoltInventoryItems.forEach(b => boltsInventory.push(b));
+      if(newBoltInventoryItems.length > 0 || onOrderBoltsChanged) await writeBoltsInventoryToSheet();
       closePOCompareModal();
       await syncAll(false);
       await loadPOReconciliation();
-      alert(`✓ ${reconciliationData.length} item(s) reconciled. ${newInventoryItems.length} item(s) added to Inventory (location: Unassigned — reassign when you know where it landed). ${reconciliationData.filter(r => r.qtyRemaining > 0).length} item(s) remain open on PO Log.`);
+      const addedCount=newInventoryItems.length+newBoltInventoryItems.length;
+      alert(`✓ ${reconciliationData.length} item(s) reconciled. ${addedCount} item(s) added to Inventory (location: Unassigned — reassign when you know where it landed). ${reconciliationData.filter(r => r.qtyRemaining > 0).length} item(s) remain open on PO Log.`);
     } else {
       alert('Error: ' + (result.error || 'Unknown error'));
     }
@@ -2215,7 +2348,7 @@ async function approvePOMatch(){
 
 // ── TAB SWITCHING ────────────────────────────────────────────────────
 function switchTab(name,btn){
-  ['inventory','add','log','backups','lists','settings','import','consumables','reconcile'].forEach(t=>document.getElementById('tab-'+t).style.display='none');
+  ['inventory','add','log','backups','lists','settings','import','consumables','reconcile','bolts'].forEach(t=>document.getElementById('tab-'+t).style.display='none');
   document.getElementById('tab-'+name).style.display='flex';
   document.querySelectorAll('.tab').forEach(b=>b.classList.remove('active'));
   btn.classList.add('active');
@@ -2229,6 +2362,7 @@ function switchTab(name,btn){
   if(name==='import'){renderImportSelector();renderInboxSection();renderPoSection();}
   if(name==='reconcile')loadPOReconciliation();
   if(name==='consumables'){buildConsProjDD();renderConsumables();}
+  else if(name==='bolts')renderBoltsInventory();
   else if(name==='log')renderLog();
   else if(name==='backups')renderBackupLog();
   else if(name==='lists')renderLists();
@@ -2788,13 +2922,13 @@ function renderPoSection(){
 }
 
 async function writePOToSheet(){
-  const header=['Supplier','Invoice #','PO #','PO Date','Doc Type','Shape','Size','Qty','Length Ft','Length In','Weight Lbs','Cost Per Lb','Total Cost','Grade','Heat #','Remarks','Status','Project','Fuel Surcharge','Promise Date'];
+  const header=['Supplier','Invoice #','PO #','PO Date','Doc Type','Shape','Size','Qty','Length Ft','Length In','Weight Lbs','Cost Per Lb','Total Cost','Grade','Heat #','Remarks','Status','Project','Fuel Surcharge','Promise Date','Unit'];
   const rows=[header,...poItems.map(i=>[
     i.supplier||'','',i.poNum||'',i.poDate||'','PO',
     i.shape||'',i.size||'',i.qty||'',i.lenFt||'',i.lenIn||'',
     i.weightLbs||'',i.costPerLb||'',i.totalCost||'',
     i.grade||'',i.heat||'',i.remarks||'',
-    i.status||'Open',i.project||'',i._fuelSurcharge||'',i.promiseDate||''
+    i.status||'Open',i.project||'',i._fuelSurcharge||'',i.promiseDate||'',i.unit||''
   ])];
   return await scriptWrite('writeSheet',{tab:TABS.po,rows});
 }
@@ -2835,13 +2969,14 @@ async function markPOReceived(groupIdx){
   if(!conf)return;
   const rowIndices=g.items.map(i=>i._rowIdx);
   const remaining=poItems.filter(i=>!rowIndices.includes(i._rowIdx));
-  const header=['Supplier','Invoice #','PO #','PO Date','Doc Type','Shape','Size','Qty','Length Ft','Length In','Weight Lbs','Cost Per Lb','Total Cost','Grade','Heat #','Remarks','Status','Project','Fuel Surcharge','Promise Date'];
-  const rows=[header,...remaining.map(i=>[i.supplier,'',i.poNum||'',i.poDate||'','PO',i.shape||'',i.size||'',i.qty||'',i.lenFt||'',i.lenIn||'',i.weightLbs||'',i.costPerLb||'',i.totalCost||'',i.grade||'',i.heat||'',i.remarks||'',i.status||'Open',i.project||'',i._fuelSurcharge||'',i.promiseDate||''])];
+  const header=['Supplier','Invoice #','PO #','PO Date','Doc Type','Shape','Size','Qty','Length Ft','Length In','Weight Lbs','Cost Per Lb','Total Cost','Grade','Heat #','Remarks','Status','Project','Fuel Surcharge','Promise Date','Unit'];
+  const rows=[header,...remaining.map(i=>[i.supplier,'',i.poNum||'',i.poDate||'','PO',i.shape||'',i.size||'',i.qty||'',i.lenFt||'',i.lenIn||'',i.weightLbs||'',i.costPerLb||'',i.totalCost||'',i.grade||'',i.heat||'',i.remarks||'',i.status||'Open',i.project||'',i._fuelSurcharge||'',i.promiseDate||'',i.unit||''])];
   const result=await scriptWrite('writeSheet',{tab:TABS.po,rows});
   if(result&&result.success){
     poItems=remaining;
     removeOnOrderInventoryForPO(g.poNum);
     await writeInventoryToSheet();
+    await writeBoltsInventoryToSheet();
     toast('PO closed and removed','success');
     renderPoSection();
   }else{toast('Failed to close PO','danger');}
@@ -2972,7 +3107,7 @@ function renderInboxReviewItems(){
         <div style="width:22px;height:22px;border-radius:50%;background:var(--accent-bg);color:var(--accent);font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0">${i+1}</div>
         <div style="flex:1;min-width:0">
           <div style="font-size:14px;font-weight:600">${item.size||'—'}</div>
-          <div style="font-size:11px;color:var(--text3);margin-top:1px">${item.shape} · ${item.qty} pcs · ${fmtLen(item.lenFt,item.lenIn)} ea · ${item.supplier}</div>
+          <div style="font-size:11px;color:var(--text3);margin-top:1px">${item.shape} · ${item.qty} ${item.materialType==='Bolts'?(item.unit||'pcs'):'pcs'}${item.materialType==='Bolts'?'':' · '+fmtLen(item.lenFt,item.lenIn)+' ea'} · ${item.supplier}</div>
         </div>
         <div style="font-size:13px;font-weight:600;color:var(--success);white-space:nowrap">${item.totalCost?'$'+parseFloat(item.totalCost).toLocaleString('en-US',{minimumFractionDigits:2}):'—'}</div>
         ${isImported?`<span style="font-size:10px;background:var(--success-bg);color:var(--success);border-radius:20px;padding:2px 8px;font-weight:600;white-space:nowrap">✓ Confirmed</span>`:''}
@@ -2981,8 +3116,8 @@ function renderInboxReviewItems(){
         </button>
       </div>
       <div style="padding:12px;display:grid;grid-template-columns:1fr 1fr;gap:8px">
-        <div><div style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:3px">Weight</div><div style="font-size:13px;color:var(--text2)">${item.weightLbs?parseFloat(item.weightLbs).toLocaleString('en-US')+' lbs':'—'}</div></div>
-        <div><div style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:3px">Cost/lb</div><div style="font-size:13px;color:var(--accent);font-weight:500">${item.costPerLb?'$'+parseFloat(item.costPerLb).toFixed(4):'—'}</div></div>
+        <div><div style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:3px">${item.materialType==='Bolts'?'Unit':'Weight'}</div><div style="font-size:13px;color:var(--text2)">${item.materialType==='Bolts'?(item.unit||'—'):(item.weightLbs?parseFloat(item.weightLbs).toLocaleString('en-US')+' lbs':'—')}</div></div>
+        <div><div style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:3px">${item.materialType==='Bolts'?'Cost/unit':'Cost/lb'}</div><div style="font-size:13px;color:var(--accent);font-weight:500">${item.costPerLb?'$'+parseFloat(item.costPerLb).toFixed(4):'—'}</div></div>
         <div><div style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:3px">Grade</div><div style="font-size:13px;color:var(--text2)">${item.grade||'—'}</div></div>
         <div><div style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:3px">Doc type</div><div style="font-size:13px;color:${item.docType==='PO'?'#60a5fa':'var(--success)'}">${item.docType==='PO'?'📋 PO':'✓ Invoice'}</div></div>
         <div style="grid-column:1/-1">
@@ -3254,6 +3389,7 @@ async function commitInboxReview(){
     grade:item.grade||'',
     heatNumber:item.heat||'',
     promiseDate:item._promiseDate||item.promiseDate||'',
+    materialType:item.materialType||'Steel',unit:item.unit||'',
     remarks:[
       item._project.trim().toUpperCase()!=='STOCK'?'Project: '+item._project.trim():'STOCK',
       item.grade||'',
@@ -3280,7 +3416,15 @@ async function commitInboxReview(){
 
   // Split entries: POs go to PO Log, Invoices go to Inventory
   const poEntries=newEntries.filter(e=>e.docType==='PO');
-  const invEntries=newEntries.filter(e=>e.docType!=='PO');
+  const invEntriesAll=newEntries.filter(e=>e.docType!=='PO');
+  const invEntries=invEntriesAll.filter(e=>e.materialType!=='Bolts');
+  const boltInvEntries=invEntriesAll.filter(e=>e.materialType==='Bolts').map(e=>({
+    id:e.id,location:e.location||'Unassigned',description:e.shape||'',size:e.size||'',unit:e.unit||'',
+    qty:e.qty,qtyRemaining:e.qty,costPerUnit:e.costPerLb||null,totalCost:e.totalCost||null,
+    fuelSurcharge:e.fuelSurcharge||0,projectOrStock:e.projectOrStock||'',docType:e.docType||'Invoice',
+    supplier:e.supplier||'',invoiceNum:e.invoiceNum||'',poNum:e.poNum||'',invoiceDate:e.invoiceDate||'',
+    grade:e.grade||'',remarks:e.remarks||'',promiseDate:e.promiseDate||'',added:new Date().toISOString()
+  }));
 
   // Write inventory entries
   if(invEntries.length){
@@ -3309,7 +3453,23 @@ async function commitInboxReview(){
     if(syncTimer) clearInterval(syncTimer);
     syncTimer=setInterval(()=>syncAll(false),SYNC_INTERVAL);
   } else {
-    console.warn('INV WRITE: no invEntries — all items routed as PO or freight?');
+    console.warn('INV WRITE: no invEntries — all items routed as PO, Bolts, or freight?');
+  }
+
+  // Write bolts inventory entries
+  if(boltInvEntries.length){
+    const freshBoltRows=await readTabViaScript(TABS.bolts);
+    if(freshBoltRows&&freshBoltRows.length){
+      boltsInventory=freshBoltRows.filter(r=>r&&r[0]&&r[0]!=='ID').map(rowToBolt);
+    }
+    boltInvEntries.forEach(b=>boltsInventory.unshift(b));
+    const boltResult=await writeBoltsInventoryToSheet();
+    if(!boltResult||!boltResult.success){
+      boltInvEntries.forEach(b=>{const idx=boltsInventory.indexOf(b);if(idx>-1)boltsInventory.splice(idx,1);});
+      toast('Bolts Inventory write failed — check connection','danger',8000);
+      console.error('writeBoltsInventoryToSheet failed:', boltResult);
+      return;
+    }
   }
 
   // Write PO entries to PO Log (new POs from inbox)
@@ -3321,6 +3481,7 @@ async function commitInboxReview(){
       weightLbs:e.totalWeight,costPerLb:e.costPerLb,totalCost:e.totalCost,
       grade:e.grade,heat:e.heatNumber,remarks:e.remarks,promiseDate:e.promiseDate||'',
       status:'Open',project:e.projectOrStock,_fuelSurcharge:e.fuelSurcharge||0,
+      unit:e.unit||'',materialType:e.materialType||'Steel',
       _rowIdx:poItems.length+2
     }));
     newPoItems.forEach(p=>{
@@ -3329,11 +3490,11 @@ async function commitInboxReview(){
     });
     await writePOToSheet();
     renderPoSection();
-    if(onOrderChanged) await writeInventoryToSheet();
+    if(onOrderChanged){ await writeInventoryToSheet(); await writeBoltsInventoryToSheet(); }
   }
 
   // If this was a PO review (assigning projects to existing PO items), update poItems and save
-  if(currentInboxGroup&&currentInboxGroup.docType==='PO'&&invEntries.length===0){
+  if(currentInboxGroup&&currentInboxGroup.docType==='PO'&&invEntriesAll.length===0){
     const updatedPONums=new Set(assigned.map(i=>i.poNum||i.invoiceNum));
     assigned.forEach(a=>{
       const match=poItems.find(p=>String(p.poNum)===String(a.poNum||a.invoiceNum)&&String(p.size)===String(a.size));
@@ -3360,7 +3521,7 @@ async function commitInboxReview(){
       toast('Projects assigned to PO','success');
     }
     
-    if(onOrderChanged) await writeInventoryToSheet();
+    if(onOrderChanged){ await writeInventoryToSheet(); await writeBoltsInventoryToSheet(); }
     currentInboxGroup=null;
     document.getElementById('import-inbox-review').style.display='none';
     document.getElementById('import-selector-view').style.display='block';
@@ -3405,11 +3566,12 @@ async function commitInboxReview(){
     removeOnOrderInventoryForPO(poNumToClose);
     await writePOToSheet();
     await writeInventoryToSheet();
+    await writeBoltsInventoryToSheet();
     renderPoSection();
     window._closePOOnConfirm=null;
     toast('✅ Invoice confirmed & PO# '+poNumToClose+' closed','success');
   } else {
-    const isAllPO=invEntries.length===0&&poEntries.length>0;
+    const isAllPO=invEntriesAll.length===0&&poEntries.length>0;
     toast('✅ '+(isAllPO?'PO':'Invoice')+' '+invoiceNum+' confirmed · '+confirmedCount+' items added to inventory','success');
   }
   // Note: no background sync — GViz cache would restore confirmed items
